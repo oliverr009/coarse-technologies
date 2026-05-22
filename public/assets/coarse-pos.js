@@ -33,6 +33,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const postBillButton = root.querySelector('[data-post-bill]');
     const checkoutStatus = root.querySelector('[data-checkout-status]');
     const recalledOrder = root.querySelector('[data-recalled-order]');
+    const orderTypeLabel = root.querySelector('[data-order-type-label]');
+    const orderContext = root.querySelector('[data-order-context]');
+    const coverSummary = root.querySelector('[data-cover-summary]');
+    const billStatusSummary = root.querySelector('[data-bill-status-summary]');
+    const tableSelect = root.querySelector('[data-table-select]');
+    const customerSelect = root.querySelector('[data-customer-select]');
+    const coversInput = root.querySelector('[data-covers-input]');
+    const notesInput = root.querySelector('[data-notes-input]');
 
     const productData = (card) => {
         try {
@@ -67,6 +75,21 @@ document.addEventListener('DOMContentLoaded', () => {
             .toLowerCase();
 
         return haystack.includes(state.search);
+    };
+
+    const activeOrderType = () => root.querySelector('.segmented button.active')?.dataset.orderType || 'dine_in';
+    const activeOrderTypeLabel = () => root.querySelector('.segmented button.active')?.textContent?.trim() || 'Dine-in';
+    const selectedOptionText = (select) => select?.options?.[select.selectedIndex]?.textContent?.trim() || '';
+
+    const resetPayments = () => {
+        ['[data-cash-amount]', '[data-mpesa-amount]', '[data-card-amount]'].forEach((selector) => {
+            const field = root.querySelector(selector);
+            if (field) field.value = '0';
+        });
+        ['[data-mpesa-ref]', '[data-card-ref]'].forEach((selector) => {
+            const field = root.querySelector(selector);
+            if (field) field.value = '';
+        });
     };
 
     const filterProducts = () => {
@@ -144,7 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
         root.querySelectorAll('input[name="cart_json"]').forEach((input) => { input.value = JSON.stringify(state.items); });
         root.querySelectorAll('input[name="payments_json"]').forEach((input) => { input.value = JSON.stringify(payments); });
         root.querySelectorAll('input[name="order_id"]').forEach((input) => { input.value = state.orderId || ''; });
-        root.querySelectorAll('input[name="order_type"]').forEach((input) => { input.value = root.querySelector('.segmented button.active')?.dataset.orderType || 'dine_in'; });
+        root.querySelectorAll('input[name="order_type"]').forEach((input) => { input.value = activeOrderType(); });
         root.querySelectorAll('input[name="restaurant_table_id"]').forEach((input) => { input.value = textValue('[data-table-select]'); });
         root.querySelectorAll('input[name="customer_id"]').forEach((input) => { input.value = textValue('[data-customer-select]'); });
         root.querySelectorAll('input[name="covers"]').forEach((input) => { input.value = textValue('[data-covers-input]') || '1'; });
@@ -154,7 +177,32 @@ document.addEventListener('DOMContentLoaded', () => {
         root.querySelectorAll('input[name="notes"]').forEach((input) => { input.value = textValue('[data-notes-input]'); });
     };
 
-    const blankCartMessage = () => '<div style="text-align:center;padding:34px 0;color:var(--text3);font-size:13px">No items yet<br><span style="font-size:11px">Tap a menu item to add it</span></div>';
+    const blankCartMessage = () => '<div class="bill-empty-state">No items yet<br><span>Tap a menu item to add it</span></div>';
+
+    const renderContext = () => {
+        const tableText = selectedOptionText(tableSelect);
+        const customerText = selectedOptionText(customerSelect);
+        const covers = Math.max(1, Number(coversInput?.value || 1));
+        const orderType = activeOrderType();
+        let serviceText = 'Counter sale';
+
+        if (tableText && tableSelect?.value) {
+            serviceText = tableText.split('·')[0].trim();
+        } else if (orderType === 'delivery') {
+            serviceText = customerText && customerSelect?.value ? customerText : 'Delivery order';
+        } else if (orderType === 'takeaway') {
+            serviceText = 'Takeaway counter';
+        }
+
+        if (orderTypeLabel) orderTypeLabel.textContent = activeOrderTypeLabel();
+        if (orderContext) orderContext.textContent = serviceText || 'Counter sale';
+        if (coverSummary) coverSummary.textContent = covers + (covers === 1 ? ' cover' : ' covers');
+        if (billStatusSummary) {
+            billStatusSummary.textContent = state.orderId
+                ? `Recalled ${state.orderNumber || '#' + state.orderId}`
+                : (state.items.length > 0 ? 'In progress' : 'New bill');
+        }
+    };
 
     const render = () => {
         const current = totals();
@@ -230,6 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
             recalledOrder.hidden = !state.orderId;
             recalledOrder.textContent = state.orderId ? `Recalled bill ${state.orderNumber || '#' + state.orderId}. Posting payment will close this open order.` : '';
         }
+        renderContext();
         syncForms();
     };
 
@@ -267,6 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.orderId = '';
         state.orderNumber = '';
         state.creditMode = false;
+        resetPayments();
         render();
     });
 
@@ -327,6 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.orderId = order.id || '';
             state.orderNumber = order.order_number || '';
             state.creditMode = false;
+            resetPayments();
             state.items = (order.items || []).map((item) => ({
                 ...item,
                 id: item.id || item.name,
@@ -335,14 +386,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 notes: item.notes || '',
             })).filter((item) => item.qty > 0);
 
-            const table = root.querySelector('[data-table-select]');
-            const customer = root.querySelector('[data-customer-select]');
-            const covers = root.querySelector('[data-covers-input]');
-            const notes = root.querySelector('[data-notes-input]');
-            if (table) table.value = order.restaurant_table_id || '';
-            if (customer) customer.value = order.customer_id || '';
-            if (covers) covers.value = order.covers || 1;
-            if (notes) notes.value = order.notes || '';
+            if (tableSelect) tableSelect.value = order.restaurant_table_id || '';
+            if (customerSelect) customerSelect.value = order.customer_id || '';
+            if (coversInput) coversInput.value = order.covers || 1;
+            if (notesInput) notesInput.value = order.notes || '';
 
             root.querySelectorAll('.segmented button').forEach((item) => {
                 item.classList.toggle('active', item.dataset.orderType === order.order_type);
@@ -356,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
         form.addEventListener('submit', (event) => {
             if (state.items.length === 0) {
                 event.preventDefault();
-                cartBox.innerHTML = '<div style="text-align:center;padding:34px 0;color:var(--red);font-size:13px">Add at least one product before posting this bill.</div>';
+                cartBox.innerHTML = '<div class="bill-empty-state" style="color:var(--red)">Add at least one product before posting this bill.</div>';
                 return;
             }
 
