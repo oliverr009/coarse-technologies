@@ -32,14 +32,21 @@
 <div class="pos-advanced">
     <div class="pos-workspace">
         <div class="pos-toolbar card2">
-            <div>
-                <div class="sec-title">Sales Terminal</div>
-                <div style="font-size:11px;color:var(--text3)">Dine-in, takeaway, delivery, split payments and held bills</div>
+            <div class="pos-brand-cluster">
+                <div class="pos-brand-badge" aria-hidden="true">CP</div>
+                <div>
+                    <div class="pos-brand-kicker">COARSE POS</div>
+                    <div class="sec-title">Sales Terminal</div>
+                    <div class="pos-toolbar-copy">Restaurant order flow for dine-in, takeaway, delivery, held bills and split-ready settlement.</div>
+                </div>
             </div>
-            <div class="segmented">
-                <button class="active" type="button" data-order-type="dine_in">Dine-in</button>
-                <button type="button" data-order-type="takeaway">Takeaway</button>
-                <button type="button" data-order-type="delivery">Delivery</button>
+            <div class="pos-toolbar-side">
+                <div class="pos-toolbar-hint">Select service mode, add items fast, then settle from the live bill rail.</div>
+                <div class="segmented">
+                    <button class="active" type="button" data-order-type="dine_in">Dine-in</button>
+                    <button type="button" data-order-type="takeaway">Takeaway</button>
+                    <button type="button" data-order-type="delivery">Delivery</button>
+                </div>
             </div>
         </div>
 
@@ -50,7 +57,7 @@
                     <button class="btn btn-ghost btn-sm" type="button" data-clear-search>Clear</button>
                 </div>
 
-                <div class="cat-tabs">
+                <div class="cat-tabs" aria-label="Menu categories">
                     <button type="button" class="cat-tab active" data-pos-category="all">All Items <small>{{ $products->count() }}</small></button>
                     @foreach($categories as $category)
                         @php $categoryCount = $products->filter(fn ($product) => $product->category?->name === $category)->count(); @endphp
@@ -81,8 +88,13 @@
                             $productJson = json_encode($productPayload, $jsonFlags);
                         @endphp
                         <button type="button" class="prod-card" data-category="{{ $product->category?->name }}" data-product="{{ $productJson }}">
-                            <div class="prod-name">{{ $product->name }}</div>
-                            @if($product->subcategory)<div class="prod-stock">{{ $product->subcategory }}</div>@endif
+                            <div class="prod-card-top">
+                                <div>
+                                    <div class="prod-name">{{ $product->name }}</div>
+                                    @if($product->subcategory)<div class="prod-stock">{{ $product->subcategory }}</div>@endif
+                                </div>
+                                <span class="prod-add-hint" aria-hidden="true">+</span>
+                            </div>
                             <div class="prod-price">KES {{ number_format($product->selling_price, 2) }}</div>
                             @if($product->description)<div class="prod-desc">{{ Str::limit($product->description, 82) }}</div>@endif
                         </button>
@@ -133,56 +145,100 @@
             </div>
 
             <div class="pos-right advanced-cart">
-                <div class="sec-head">
-                    <span class="sec-title">Current Bill</span>
+                <div class="bill-rail-head">
+                    <div>
+                        <div class="sec-title">Current Bill</div>
+                        <div class="bill-rail-copy">Live transaction rail for this order session.</div>
+                    </div>
                     <button class="btn btn-ghost btn-sm" type="button" data-clear-cart>Clear Bill</button>
                 </div>
+
                 <div class="bill-summary-strip">
                     <span data-line-count>0 lines</span>
                     <span data-item-count>0 items</span>
                     <strong data-mini-total>KES 0.00</strong>
                 </div>
+
+                <div class="bill-context-grid">
+                    <div class="bill-context-card">
+                        <span>Mode</span>
+                        <strong data-order-type-label>Dine-in</strong>
+                    </div>
+                    <div class="bill-context-card">
+                        <span>Service</span>
+                        <strong data-order-context>No table / counter sale</strong>
+                    </div>
+                    <div class="bill-context-card">
+                        <span>Guest</span>
+                        <strong data-cover-summary>1 cover</strong>
+                    </div>
+                    <div class="bill-context-card">
+                        <span>Status</span>
+                        <strong data-bill-status-summary>New bill</strong>
+                    </div>
+                </div>
+
                 <div class="recalled-order" data-recalled-order hidden></div>
 
-                <div class="cart-items advanced-items" data-cart-items>
-                    <div style="text-align:center;padding:34px 0;color:var(--text3);font-size:13px">No items yet<br><span style="font-size:11px">Tap a menu item to add it</span></div>
+                <div class="bill-section">
+                    <div class="bill-section-head">
+                        <span class="sec-title">Order Details</span>
+                        <span class="bill-inline-note">Attach table, customer and notes before posting.</span>
+                    </div>
+                    <div class="order-fields">
+                        <select class="inp" data-table-select>
+                            <option value="">No table / counter sale</option>
+                            @foreach($tables as $table)
+                                <option value="{{ $table->id }}">{{ $table->name }} · {{ $table->status }}</option>
+                            @endforeach
+                        </select>
+                        <input class="inp" type="number" min="1" max="99" value="1" data-covers-input placeholder="Covers">
+                        <select class="inp" data-customer-select>
+                            <option value="">Walk-in customer</option>
+                            @foreach($customers as $customer)
+                                <option value="{{ $customer->id }}">{{ $customer->name }}</option>
+                            @endforeach
+                        </select>
+                        <textarea class="inp" rows="2" data-notes-input placeholder="Bill notes, delivery address, allergies"></textarea>
+                    </div>
                 </div>
 
-                <div class="order-fields">
-                    <select class="inp" data-table-select>
-                        <option value="">No table / counter sale</option>
-                        @foreach($tables as $table)
-                            <option value="{{ $table->id }}">{{ $table->name }} · {{ $table->status }}</option>
-                        @endforeach
-                    </select>
-                    <input class="inp" type="number" min="1" max="99" value="1" data-covers-input placeholder="Covers">
-                    <select class="inp" data-customer-select>
-                        <option value="">Walk-in customer</option>
-                        @foreach($customers as $customer)
-                            <option value="{{ $customer->id }}">{{ $customer->name }}</option>
-                        @endforeach
-                    </select>
-                    <textarea class="inp" rows="2" data-notes-input placeholder="Bill notes, delivery address, allergies"></textarea>
+                <div class="bill-section bill-items-section">
+                    <div class="bill-section-head">
+                        <span class="sec-title">Bill Items</span>
+                        <span class="bill-inline-note">Tap menu items to build the order.</span>
+                    </div>
+                    <div class="cart-items advanced-items" data-cart-items>
+                        <div class="bill-empty-state">No items yet<br><span>Tap a menu item to add it</span></div>
+                    </div>
                 </div>
 
-                <div class="cart-divider"></div>
+                <div class="bill-section">
+                    <div class="bill-section-head">
+                        <span class="sec-title">Charges</span>
+                        <span class="bill-inline-note">Discounts and service charge apply here.</span>
+                    </div>
+                    <div class="charge-grid">
+                        <select class="inp" data-discount-type>
+                            <option value="fixed">Fixed discount</option>
+                            <option value="percent">Percent discount</option>
+                        </select>
+                        <input class="inp" type="number" min="0" step="0.01" value="0" data-discount-value placeholder="Discount">
+                        <input class="inp" type="number" min="0" max="100" step="0.01" value="0" data-service-rate placeholder="Service %">
+                    </div>
 
-                <div class="charge-grid">
-                    <select class="inp" data-discount-type>
-                        <option value="fixed">Fixed discount</option>
-                        <option value="percent">Percent discount</option>
-                    </select>
-                    <input class="inp" type="number" min="0" step="0.01" value="0" data-discount-value placeholder="Discount">
-                    <input class="inp" type="number" min="0" max="100" step="0.01" value="0" data-service-rate placeholder="Service %">
+                    <div class="ct-row"><span>Subtotal</span><span data-subtotal>KES 0.00</span></div>
+                    <div class="ct-row"><span>Discount</span><span data-discount>-KES 0.00</span></div>
+                    <div class="ct-row"><span>Service charge</span><span data-service>KES 0.00</span></div>
+                    <div class="ct-row"><span>VAT</span><span data-tax>KES 0.00</span></div>
+                    <div class="ct-total"><span>Total</span><span class="ct-total-val" data-total>KES 0.00</span></div>
                 </div>
-
-                <div class="ct-row"><span>Subtotal</span><span data-subtotal>KES 0.00</span></div>
-                <div class="ct-row"><span>Discount</span><span data-discount>-KES 0.00</span></div>
-                <div class="ct-row"><span>Service charge</span><span data-service>KES 0.00</span></div>
-                <div class="ct-row"><span>VAT</span><span data-tax>KES 0.00</span></div>
-                <div class="ct-total"><span>Total</span><span class="ct-total-val" data-total>KES 0.00</span></div>
 
                 <div class="payment-panel">
+                    <div class="bill-section-head">
+                        <span class="sec-title">Settlement</span>
+                        <span class="bill-inline-note">Multiple payments and customer credit are supported.</span>
+                    </div>
                     <div class="quick-pay">
                         <button type="button" class="btn btn-ghost btn-sm" data-pay-full="cash">Cash full</button>
                         <button type="button" class="btn btn-ghost btn-sm" data-pay-full="mpesa">M-Pesa full</button>
@@ -202,42 +258,44 @@
                     <div class="checkout-status" data-checkout-status>Add products to start a bill.</div>
                 </div>
 
-                <form method="post" action="{{ route('pos.sale') }}" class="pay-btns" data-pos-form="sale">
-                    @csrf
-                    <input type="hidden" name="cart_json">
-                    <input type="hidden" name="payments_json">
-                    <input type="hidden" name="order_id">
-                    <input type="hidden" name="order_type">
-                    <input type="hidden" name="restaurant_table_id">
-                    <input type="hidden" name="customer_id">
-                    <input type="hidden" name="discount_type">
-                    <input type="hidden" name="discount_value">
-                    <input type="hidden" name="service_charge_rate">
-                    <input type="hidden" name="notes">
-                    <button class="pay-btn pb-cash" data-post-bill disabled>Post Bill & Print Receipt</button>
-                </form>
+                <div class="bill-footer-actions">
+                    <form method="post" action="{{ route('pos.sale') }}" class="pay-btns" data-pos-form="sale">
+                        @csrf
+                        <input type="hidden" name="cart_json">
+                        <input type="hidden" name="payments_json">
+                        <input type="hidden" name="order_id">
+                        <input type="hidden" name="order_type">
+                        <input type="hidden" name="restaurant_table_id">
+                        <input type="hidden" name="customer_id">
+                        <input type="hidden" name="discount_type">
+                        <input type="hidden" name="discount_value">
+                        <input type="hidden" name="service_charge_rate">
+                        <input type="hidden" name="notes">
+                        <button class="pay-btn pb-cash" data-post-bill disabled>Post Bill & Print Receipt</button>
+                    </form>
 
-                <div class="bill-actions">
-                    <form method="post" action="{{ route('pos.kitchen') }}" data-pos-form="kitchen">
-                        @csrf
-                        <input type="hidden" name="cart_json">
-                        <input type="hidden" name="order_type">
-                        <input type="hidden" name="restaurant_table_id">
-                        <input type="hidden" name="customer_id">
-                        <input type="hidden" name="covers">
-                        <input type="hidden" name="notes">
-                        <button class="btn btn-gold">Send to Kitchen</button>
-                    </form>
-                    <form method="post" action="{{ route('pos.hold') }}" data-pos-form="hold">
-                        @csrf
-                        <input type="hidden" name="cart_json">
-                        <input type="hidden" name="order_type">
-                        <input type="hidden" name="restaurant_table_id">
-                        <input type="hidden" name="customer_id">
-                        <input type="hidden" name="covers">
-                        <input type="hidden" name="notes">
-                        <button class="btn btn-ghost">Hold Bill</button>
-                    </form>
+                    <div class="bill-actions">
+                        <form method="post" action="{{ route('pos.kitchen') }}" data-pos-form="kitchen">
+                            @csrf
+                            <input type="hidden" name="cart_json">
+                            <input type="hidden" name="order_type">
+                            <input type="hidden" name="restaurant_table_id">
+                            <input type="hidden" name="customer_id">
+                            <input type="hidden" name="covers">
+                            <input type="hidden" name="notes">
+                            <button class="btn btn-gold">Send to Kitchen</button>
+                        </form>
+                        <form method="post" action="{{ route('pos.hold') }}" data-pos-form="hold">
+                            @csrf
+                            <input type="hidden" name="cart_json">
+                            <input type="hidden" name="order_type">
+                            <input type="hidden" name="restaurant_table_id">
+                            <input type="hidden" name="customer_id">
+                            <input type="hidden" name="covers">
+                            <input type="hidden" name="notes">
+                            <button class="btn btn-ghost">Hold Bill</button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
