@@ -1,0 +1,6 @@
+@extends('layouts.app', ['title' => 'Reports'])
+@section('content')
+<div class="stats-row"><div class="stat-card"><div class="stat-label">Operating Expenses</div><div class="stat-value sv-gold">KES {{ number_format($expenses,2) }}</div><div class="stat-change">All time</div></div><div class="stat-card"><div class="stat-label">Ledger Rows</div><div class="stat-value sv-blue">{{ $movements->count() }}</div><div class="stat-change">Latest stock activity</div></div></div>
+<div class="grid-2"><div class="card"><div class="sec-head"><span class="sec-title">Ingredient Consumption</span></div><table><thead><tr><th>Product</th><th>Qty</th><th>Cost</th></tr></thead><tbody>@foreach($consumption as $c)<tr><td>{{ $c->name }}</td><td>{{ number_format($c->qty,4) }} {{ $c->unit }}</td><td>KES {{ number_format($c->cost,2) }}</td></tr>@endforeach</tbody></table></div><div class="card"><div class="sec-head"><span class="sec-title">Stock Movement Audit</span></div><table><thead><tr><th>Product</th><th>Type</th><th>Qty</th></tr></thead><tbody>@foreach($movements as $m)<tr><td>{{ $m->product->name ?? '-' }}</td><td><span class="badge b-blue">{{ $m->movement_type }}</span></td><td>{{ number_format($m->quantity,4) }}</td></tr>@endforeach</tbody></table></div></div>
+@endsection
+

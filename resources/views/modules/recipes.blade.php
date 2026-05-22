@@ -1,0 +1,10 @@
+@extends('layouts.app', ['title' => 'Recipes & BOM'])
+@section('content')
+<div class="card" style="margin-bottom:16px"><div class="sec-head"><span class="sec-title">Create Active Recipe</span></div>
+<form method="post" action="{{ route('actions.recipe') }}">@csrf
+<div class="form-grid"><div><div class="lbl">Finished Product</div><select class="inp" name="product_id">@foreach($finished as $p)<option value="{{ $p->id }}">{{ $p->name }}</option>@endforeach</select></div><div><div class="lbl">Yield Qty</div><input class="inp" name="yield_quantity" value="1" type="number" step="0.0001"></div><div><div class="lbl">Yield Unit</div><input class="inp" name="yield_unit" value="pcs"></div><div><div class="lbl">Version</div><input class="inp" name="version" value="1"></div></div>
+@for($i=0;$i<5;$i++)<div class="form-grid" style="margin-top:8px"><div><div class="lbl">Ingredient</div><select class="inp" name="ingredient_product_id[]"><option value="">--</option>@foreach($ingredients as $p)<option value="{{ $p->id }}">{{ $p->name }}</option>@endforeach</select></div><div><div class="lbl">Qty</div><input class="inp" name="quantity_required[]" type="number" step="0.0001"></div><div><div class="lbl">Unit</div><input class="inp" name="unit[]" value="kg"></div><div><div class="lbl">Wastage %</div><input class="inp" name="wastage_percent[]" value="0" type="number" step="0.001"><input type="hidden" name="cost_snapshot[]" value=""></div></div>@endfor
+<p><button class="btn btn-primary">Activate Recipe</button></p></form></div>
+<div class="grid-3">@foreach($recipes as $recipe)<div class="card"><div class="sec-title">{{ $recipe->product->name }}</div><p><span class="badge b-gold">v{{ $recipe->version }} {{ $recipe->status }}</span></p>@foreach($recipe->items as $item)<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border2);padding:6px 0"><span>{{ $item->ingredient->name }}</span><strong style="color:var(--blue)">{{ $item->quantity_required }} {{ $item->unit }}</strong></div>@endforeach</div>@endforeach</div>
+@endsection
+
