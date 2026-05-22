@@ -23,9 +23,22 @@ class ModuleController extends Controller
 {
     public function inventory()
     {
+        $products = Product::query()
+            ->with('category')
+            ->withSum('stockLevels as stock_qty', 'quantity')
+            ->orderBy('name')
+            ->get();
+
         return view('modules.inventory', [
-            'products' => Product::query()->with('category')->withSum('stockLevels as stock_qty', 'quantity')->orderBy('name')->get(),
+            'products' => $products,
             'categories' => Category::query()->orderBy('name')->get(),
+            'movements' => StockMovement::query()->with('product')->latest()->limit(12)->get(),
+            'summary' => [
+                'products' => $products->count(),
+                'menu_items' => $products->whereIn('product_type', ['finished_product', 'resale_item'])->count(),
+                'raw_materials' => $products->where('product_type', 'raw_material')->count(),
+                'low_stock' => $products->filter(fn ($product) => (float) ($product->stock_qty ?? 0) <= (float) $product->reorder_level && in_array($product->product_type, ['raw_material', 'resale_item', 'semi_finished'], true))->count(),
+            ],
         ]);
     }
 

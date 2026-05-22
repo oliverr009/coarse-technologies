@@ -381,3 +381,42 @@ document.addEventListener('DOMContentLoaded', () => {
     filterProducts();
     render();
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    const root = document.querySelector('.inventory-page');
+    if (!root || root.dataset.inventoryReady === '1') return;
+    root.dataset.inventoryReady = '1';
+
+    const rows = [...root.querySelectorAll('[data-inventory-row]')];
+    const search = root.querySelector('[data-inventory-search]');
+    const type = root.querySelector('[data-inventory-type]');
+    const category = root.querySelector('[data-inventory-category]');
+    const count = root.querySelector('[data-inventory-count]');
+    const empty = root.querySelector('[data-inventory-empty]');
+
+    const filter = () => {
+        const query = (search?.value || '').trim().toLowerCase();
+        const selectedType = type?.value || 'all';
+        const selectedCategory = category?.value || 'all';
+        let visible = 0;
+
+        rows.forEach((row) => {
+            const typeOk = selectedType === 'all' || row.dataset.type === selectedType;
+            const categoryOk = selectedCategory === 'all' || row.dataset.category === selectedCategory;
+            const searchOk = !query || (row.dataset.search || '').includes(query);
+            const show = typeOk && categoryOk && searchOk;
+            row.hidden = !show;
+            if (show) visible++;
+        });
+
+        if (count) count.textContent = visible + (visible === 1 ? ' item' : ' items');
+        if (empty) empty.hidden = visible > 0;
+    };
+
+    [search, type, category].forEach((control) => {
+        control?.addEventListener('input', filter);
+        control?.addEventListener('change', filter);
+    });
+
+    filter();
+});

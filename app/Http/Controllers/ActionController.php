@@ -23,19 +23,35 @@ class ActionController extends Controller
 {
     public function product(Request $request)
     {
-        Product::query()->create($request->validate([
+        $data = $request->validate([
             'name' => ['required'],
-            'sku' => ['nullable'],
-            'barcode' => ['nullable'],
-            'description' => ['nullable'],
+            'sku' => ['nullable', 'max:80'],
+            'barcode' => ['nullable', 'max:80'],
+            'description' => ['nullable', 'max:1000'],
             'category_id' => ['nullable', 'exists:categories,id'],
-            'subcategory' => ['nullable'],
-            'product_type' => ['required'],
-            'unit' => ['required'],
-            'cost_price' => ['nullable', 'numeric'],
-            'selling_price' => ['nullable', 'numeric'],
-            'reorder_level' => ['nullable', 'numeric'],
-        ]));
+            'new_category' => ['nullable', 'max:80'],
+            'subcategory' => ['nullable', 'max:80'],
+            'product_type' => ['required', 'in:raw_material,finished_product,resale_item,semi_finished,service'],
+            'unit' => ['required', 'max:30'],
+            'cost_price' => ['nullable', 'numeric', 'min:0'],
+            'selling_price' => ['nullable', 'numeric', 'min:0'],
+            'reorder_level' => ['nullable', 'numeric', 'min:0'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        if (! empty($data['new_category'])) {
+            $category = Category::query()->firstOrCreate([
+                'name' => trim($data['new_category']),
+            ], [
+                'type' => in_array($data['product_type'], ['raw_material', 'semi_finished'], true) ? 'inventory' : 'menu',
+            ]);
+            $data['category_id'] = $category->id;
+        }
+
+        unset($data['new_category']);
+        $data['is_active'] = $request->boolean('is_active', true);
+
+        Product::query()->create($data);
 
         return back()->with('status', 'Product saved.');
     }
