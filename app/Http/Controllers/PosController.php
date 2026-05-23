@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\RestaurantTable;
 use App\Models\Sale;
+use App\Models\Setting;
 use App\Services\PosService;
 use Illuminate\Http\Request;
 
@@ -19,6 +20,7 @@ class PosController extends Controller
             'tables' => RestaurantTable::query()->orderBy('name')->get(),
             'customers' => Customer::query()->orderBy('name')->get(),
             'openOrders' => Order::query()->with(['table', 'items'])->whereIn('status', ['held', 'sent'])->latest()->limit(8)->get(),
+            'taxRate' => (float) (Setting::query()->where('key', 'tax_rate')->first()?->value ?? 0),
         ]);
     }
 
