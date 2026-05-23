@@ -7,7 +7,6 @@ use App\Models\Sale;
 use App\Models\SalePayment;
 use App\Models\StockMovement;
 use App\Services\ReportService;
-use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
@@ -24,11 +23,11 @@ class DashboardController extends Controller
                 ];
             });
 
-        $todaySales = Sale::query()->whereDate('created_at', today());
+        $todaySalesQuery = Sale::query()->whereDate('created_at', today());
         $todayPaymentTotal = (float) SalePayment::query()
             ->whereHas('sale', fn ($query) => $query->whereDate('created_at', today()))
             ->sum('amount');
-        $todayCreditTotal = (float) $todaySales->clone()->sum('balance_due');
+        $todayCreditTotal = (float) (clone $todaySalesQuery)->sum('balance_due');
         $paymentBase = max(0.01, $todayPaymentTotal + $todayCreditTotal);
 
         $paymentMix = [
