@@ -467,3 +467,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
     filter();
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    const root = document.querySelector('.purchase-page');
+    if (!root || root.dataset.purchaseReady === '1') return;
+    root.dataset.purchaseReady = '1';
+
+    const money = (value) => 'KES ' + Number(value || 0).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+    const lines = [...root.querySelectorAll('[data-purchase-line]')];
+    const totalBadge = root.querySelector('[data-purchase-total]');
+    const status = root.querySelector('[data-purchase-status]');
+    const submit = root.querySelector('[data-purchase-submit]');
+
+    const refresh = () => {
+        let total = 0;
+        let validLines = 0;
+
+        lines.forEach((line) => {
+            const product = line.querySelector('select[name="product_id[]"]');
+            const qty = line.querySelector('input[name="quantity[]"]');
+            const cost = line.querySelector('input[name="unit_cost[]"]');
+            const lineTotal = line.querySelector('[data-line-total]');
+            const amount = Math.max(0, Number(qty?.value || 0)) * Math.max(0, Number(cost?.value || 0));
+
+            if (product?.value && Number(qty?.value || 0) > 0) validLines++;
+            total += amount;
+            if (lineTotal) lineTotal.textContent = money(amount);
+        });
+
+        if (totalBadge) totalBadge.textContent = money(total);
+        if (submit) submit.disabled = validLines === 0;
+        if (status) {
+            status.textContent = validLines === 0 ? 'Add at least one stock-in line.' : `${validLines} line${validLines === 1 ? '' : 's'} ready. Stock will increase immediately after posting.`;
+            status.dataset.tone = validLines === 0 ? 'warn' : 'ready';
+        }
+    };
+
+    lines.forEach((line) => {
+        const product = line.querySelector('select[name="product_id[]"]');
+        const cost = line.querySelector('input[name="unit_cost[]"]');
+        product?.addEventListener('change', () => {
+            const selected = product.selectedOptions[0];
+            if (cost && !cost.value && selected?.dataset.cost) {
+                cost.value = Number(selected.dataset.cost || 0).toFixed(2);
+            }
+            refresh();
+        });
+        line.querySelectorAll('input,select').forEach((field) => {
+            field.addEventListener('input', refresh);
+            field.addEventListener('change', refresh);
+        });
+    });
+
+    refresh();
+});

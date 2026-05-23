@@ -68,10 +68,19 @@ class ModuleController extends Controller
 
     public function purchases()
     {
+        $purchases = Purchase::query()->with(['items.product', 'supplier'])->latest()->get();
+
         return view('modules.purchases', [
-            'purchases' => Purchase::query()->with('items')->latest()->get(),
+            'purchases' => $purchases,
             'products' => Product::query()->whereIn('product_type', ['raw_material', 'resale_item', 'semi_finished'])->orderBy('name')->get(),
             'suppliers' => Supplier::query()->orderBy('name')->get(),
+            'movements' => StockMovement::query()->with('product')->where('movement_type', 'PURCHASE')->latest()->limit(12)->get(),
+            'summary' => [
+                'purchases' => $purchases->count(),
+                'value' => $purchases->sum('total_amount'),
+                'items' => $purchases->sum(fn ($purchase) => $purchase->items->count()),
+                'suppliers' => Supplier::query()->count(),
+            ],
         ]);
     }
 

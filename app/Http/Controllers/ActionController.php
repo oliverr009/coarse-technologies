@@ -126,31 +126,66 @@ class ActionController extends Controller
 
     public function purchase(Request $request, InventoryService $inventory)
     {
-        DB::transaction(function () use ($request, $inventory) {
+        $data = $request->validate([
+            'supplier_id' => ['nullable', 'exists:suppliers,id'],
+            'supplier_name' => ['nullable', 'max:120'],
+            'supplier_phone' => ['nullable', 'max:80'],
+            'supplier_email' => ['nullable', 'email', 'max:120'],
+            'notes' => ['nullable', 'max:1000'],
+            'product_id' => ['required', 'array'],
+            'product_id.*' => ['nullable', 'exists:products,id'],
+            'quantity' => ['required', 'array'],
+            'quantity.*' => ['nullable', 'numeric', 'min:0'],
+            'unit_cost' => ['required', 'array'],
+            'unit_cost.*' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        try {
+            DB::transaction(function () use ($request, $inventory, $data) {
+            $supplierId = $data['supplier_id'] ?? null;
+            if (! $supplierId && ! empty($data['supplier_name'])) {
+                $supplierId = Supplier::query()->firstOrCreate([
+                    'name' => trim($data['supplier_name']),
+                ], [
+                    'phone' => $data['supplier_phone'] ?? null,
+                    'email' => $data['supplier_email'] ?? null,
+                ])->id;
+            }
+
             $purchase = Purchase::query()->create([
                 'purchase_number' => Numbers::next('PUR', 'purchases', 'purchase_number'),
-                'supplier_id' => $request->input('supplier_id'),
+                'supplier_id' => $supplierId,
                 'outlet_id' => 1,
                 'total_amount' => 0,
-                'notes' => $request->input('notes'),
+                'notes' => $data['notes'] ?? null,
                 'created_by' => $request->user()->id,
             ]);
 
             $total = 0;
-            foreach ($request->input('product_id', []) as $i => $productId) {
+            foreach ($data['product_id'] as $i => $productId) {
                 if (! $productId) {
                     continue;
                 }
-                $qty = (float) $request->input("quantity.{$i}");
-                $cost = (float) $request->input("unit_cost.{$i}");
+                $qty = (float) ($data['quantity'][$i] ?? 0);
+                $cost = (float) ($data['unit_cost'][$i] ?? 0);
+                if ($qty <= 0) {
+                    continue;
+                }
                 $line = $qty * $cost;
                 $total += $line;
                 $purchase->items()->create(['product_id' => $productId, 'quantity' => $qty, 'unit_cost' => $cost, 'line_total' => $line]);
                 $inventory->move((int) $productId, 1, $qty, 'PURCHASE', Purchase::class, $purchase->id, $request->user()->id, $cost, 'Purchase stock-in');
             }
 
+            if ($total <= 0) {
+                throw new \RuntimeException('Add at least one purchase line with quantity greater than zero.');
+            }
+
             $purchase->update(['total_amount' => $total]);
-        });
+            });
+        } catch (\Throwable $e) {
+            return back()->withErrors(['purchase' => $e->getMessage()])->withInput();
+        }
 
         return back()->with('status', 'Purchase posted.');
     }
