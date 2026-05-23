@@ -52,7 +52,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderTypeButtons = [...root.querySelectorAll('[data-order-type-btn]')];
     const categoryButtons = [...root.querySelectorAll('[data-pos-category]')];
     const productButtons = [...root.querySelectorAll('[data-pos-product]')];
+    const productSections = [...root.querySelectorAll('[data-pos-section]')];
     const searchInput = root.querySelector('[data-pos-search]');
+    const searchClear = root.querySelector('[data-pos-search-clear]');
     const cartBox = root.querySelector('[data-cart-items]');
     const tableSelect = root.querySelector('[data-table-select]');
     const customerSelect = root.querySelector('[data-customer-select]');
@@ -298,9 +300,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 .includes(state.search);
             button.hidden = !(categoryMatch && searchMatch);
         });
+        productSections.forEach((section) => {
+            const visibleCount = [...section.querySelectorAll('[data-pos-product]')].filter((button) => !button.hidden).length;
+            section.hidden = visibleCount === 0;
+            const countNode = section.querySelector('.cat-count');
+            if (countNode) countNode.textContent = String(visibleCount);
+        });
         categoryButtons.forEach((button) => {
             button.classList.toggle('active', button.dataset.posCategory === state.category);
         });
+        if (searchClear) searchClear.hidden = state.search.length === 0;
     };
 
     const openModal = (id) => {
@@ -383,6 +392,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     searchInput?.addEventListener('input', () => {
         state.search = searchInput.value.trim().toLowerCase();
+        filterProducts();
+    });
+
+    searchClear?.addEventListener('click', () => {
+        searchInput.value = '';
+        state.search = '';
+        searchInput.focus();
         filterProducts();
     });
 

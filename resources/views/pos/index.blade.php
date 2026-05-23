@@ -2,6 +2,7 @@
 
 @php
     $categories = $products->pluck('category.name')->filter()->unique()->values();
+    $productsByCategory = $products->groupBy(fn ($product) => $product->category?->name ?: 'Menu');
     $categoryEmoji = [
         'Mains' => '🥩',
         'Sides' => '🥗',
@@ -25,6 +26,19 @@
         'Cocktails' => '🍸',
         'Bar' => '🍷',
     ];
+    $stationForCategory = function (?string $category) {
+        $category = strtolower($category ?? '');
+
+        if (preg_match('/drink|bar|coffee|tea|lemonade|juice|milkshake|mocktail|cocktail/', $category)) {
+            return ['label' => 'BAR', 'class' => 'pb-bar'];
+        }
+
+        if (preg_match('/salad|dessert|ice cream|fruit/', $category)) {
+            return ['label' => 'COLD', 'class' => 'pb-cold'];
+        }
+
+        return ['label' => 'KITCHEN', 'class' => 'pb-kitchen'];
+    };
     $jsonFlags = JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_TAG;
 @endphp
 
@@ -87,41 +101,55 @@
                 <div class="search-wrap">
                     <i class="ti ti-search search-icon" aria-hidden="true"></i>
                     <input class="search-inp" data-pos-search placeholder="Search product or scan barcode…">
+                    <button class="search-clear" type="button" data-pos-search-clear aria-label="Clear search" hidden><i class="ti ti-x"></i></button>
                 </div>
             </div>
 
-            <div class="cat-row">
-                <button class="cat active" type="button" data-pos-category="all">All Items</button>
+            <div class="cat-tiles-bar">
+                <button class="cat-tile active" type="button" data-pos-category="all">
+                    All Items <span class="ct-count">{{ $products->count() }}</span>
+                </button>
                 @foreach($categories as $category)
-                    <button class="cat" type="button" data-pos-category="{{ $category }}">{{ $categoryEmoji[$category] ?? '🍽️' }} {{ $category }}</button>
+                    <button class="cat-tile" type="button" data-pos-category="{{ $category }}">
+                        {{ $categoryEmoji[$category] ?? '🍽️' }} {{ $category }}
+                        <span class="ct-count">{{ $productsByCategory->get($category)?->count() ?? 0 }}</span>
+                    </button>
                 @endforeach
             </div>
 
             <div class="product-area">
-                <div class="prod-grid">
-                    @foreach($products as $product)
-                        @php
-                            $productPayload = [
-                                'id' => $product->id,
-                                'name' => $product->name,
-                                'price' => (float) $product->selling_price,
-                                'category' => $product->category?->name,
-                                'subcategory' => $product->subcategory,
-                                'sku' => $product->sku,
-                                'barcode' => $product->barcode,
-                            ];
-                        @endphp
-                        <button class="prod" type="button" data-pos-product="{{ json_encode($productPayload, $jsonFlags) }}">
-                            <span class="prod-emoji" aria-hidden="true">{{ $categoryEmoji[$product->category?->name] ?? '🍽️' }}</span>
-                            <div class="prod-name">{{ $product->name }}</div>
-                            <div class="prod-price">{{ number_format($product->selling_price, 0) }}</div>
-                            <div class="prod-meta">
-                                <span class="prod-cat">{{ $product->category?->name ?? 'Menu' }}</span>
-                                <span class="prod-stock {{ $product->is_active ? 'ps-ok' : 'ps-low' }}">{{ $product->subcategory ?: 'Ready' }}</span>
-                            </div>
-                        </button>
+                @foreach($productsByCategory as $categoryName => $categoryProducts)
+                    <section class="cat-section" data-pos-section="{{ $categoryName }}">
+                        <div class="cat-header">
+                            <span class="cat-title">{{ $categoryName }}</span>
+                            <span class="cat-count">{{ $categoryProducts->count() }}</span>
+                        </div>
+                        <div class="prod-grid">
+                            @foreach($categoryProducts as $product)
+                                @php
+                                    $productCategory = $product->category?->name;
+                                    $station = $stationForCategory($productCategory);
+                                    $productPayload = [
+                                        'id' => $product->id,
+                                        'name' => $product->name,
+                                        'price' => (float) $product->selling_price,
+                                        'category' => $productCategory,
+                                        'subcategory' => $product->subcategory,
+                                        'sku' => $product->sku,
+                                        'barcode' => $product->barcode,
+                                    ];
+                                @endphp
+                                <button class="prod" type="button" data-pos-product="{{ json_encode($productPayload, $jsonFlags) }}">
+                                    <span class="prod-stock {{ $product->is_active ? 'ps-ok' : 'ps-low' }}">{{ $product->is_active ? 'READY' : 'LOW' }}</span>
+                                    <span class="prod-station {{ $station['class'] }}">{{ $station['label'] }}</span>
+                                    <span class="prod-emoji" aria-hidden="true">{{ $categoryEmoji[$productCategory] ?? '🍽️' }}</span>
+                                    <div class="prod-name">{{ $product->name }}</div>
+                                    <div class="prod-price">{{ number_format($product->selling_price, 0) }}</div>
+                                </button>
+                            @endforeach
+                        </div>
+                    </section>
                     @endforeach
-                </div>
             </div>
         </div>
 
