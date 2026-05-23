@@ -23,6 +23,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0e1230">
     <title>{{ $title ?? 'COARSE Restaurant POS' }}</title>
+    <script>
+        (function () {
+            var theme = localStorage.getItem('coarse-theme') || 'dark';
+            document.documentElement.dataset.theme = theme;
+            document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#f5f8fc' : '#0e1230');
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -62,6 +69,7 @@
             </div>
             <div class="topbar-spacer"></div>
             <button class="topbar-pill pill-restaurant" type="button"><i class="ti ti-tools-kitchen-2" aria-hidden="true"></i> Restaurant</button>
+            <button class="topbar-icon theme-toggle" type="button" aria-label="Switch theme" data-theme-toggle title="Switch theme"><i class="ti ti-sun" aria-hidden="true"></i></button>
             <button class="topbar-icon" type="button" aria-label="Notifications"><i class="ti ti-bell" aria-hidden="true"></i></button>
             <button class="topbar-icon" type="button" aria-label="Search"><i class="ti ti-search" aria-hidden="true"></i></button>
             <div class="avatar" title="{{ auth()->user()->name ?? 'Guest' }}">{{ strtoupper(substr(auth()->user()->name ?? 'U', 0, 1)) }}</div>

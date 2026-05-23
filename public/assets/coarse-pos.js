@@ -1,4 +1,27 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.querySelector('[data-theme-toggle]');
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+
+    const applyTheme = (theme) => {
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem('coarse-theme', theme);
+        if (metaTheme) metaTheme.setAttribute('content', theme === 'light' ? '#f5f8fc' : '#0e1230');
+        if (toggle) {
+            toggle.setAttribute('aria-label', theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
+            toggle.title = theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
+            const icon = toggle.querySelector('i');
+            if (icon) icon.className = theme === 'light' ? 'ti ti-moon' : 'ti ti-sun';
+        }
+    };
+
+    applyTheme(localStorage.getItem('coarse-theme') || document.documentElement.dataset.theme || 'dark');
+
+    toggle?.addEventListener('click', () => {
+        applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+    });
+});
+
+document.addEventListener('DOMContentLoaded', () => {
     const root = document.querySelector('[data-pos-root]');
     if (!root || root.dataset.posReady === '1') return;
     root.dataset.posReady = '1';
