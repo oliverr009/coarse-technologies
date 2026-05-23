@@ -1,75 +1,151 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const root = document.querySelector('.pos-advanced');
-    if (!root || root.dataset.localPosReady === '1') return;
-    root.dataset.localPosReady = '1';
-    root.classList.add('local-pos-ready');
+    const root = document.querySelector('[data-pos-root]');
+    if (!root || root.dataset.posReady === '1') return;
+    root.dataset.posReady = '1';
 
     const state = {
         items: [],
         category: 'all',
         search: '',
-        orderId: '',
-        orderNumber: '',
-        creditMode: false,
     };
 
-    const money = (value) => 'KES ' + Number(value || 0).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
-
-    const numberValue = (selector) => Number(root.querySelector(selector)?.value || 0);
-    const textValue = (selector) => root.querySelector(selector)?.value || '';
-
-    const productCards = [...root.querySelectorAll('.prod-card[data-product]')];
-    const categoryButtons = [...root.querySelectorAll('[data-pos-category]')];
+    const taxRate = Number(root.dataset.taxRate || 0);
+    const money = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     const searchInput = root.querySelector('[data-pos-search]');
-    const clearSearch = root.querySelector('[data-clear-search]');
-    const clearCart = root.querySelector('[data-clear-cart]');
-    const cartBox = root.querySelector('[data-cart-items]');
-    const emptyResults = root.querySelector('[data-empty-results]');
-    const resultsCount = root.querySelector('[data-results-count]');
-    const activeFilter = root.querySelector('[data-active-filter]');
-    const postBillButton = root.querySelector('[data-post-bill]');
-    const checkoutStatus = root.querySelector('[data-checkout-status]');
-    const recalledOrder = root.querySelector('[data-recalled-order]');
-    const orderTypeLabel = root.querySelector('[data-order-type-label]');
-    const orderContext = root.querySelector('[data-order-context]');
-    const coverSummary = root.querySelector('[data-cover-summary]');
-    const billStatusSummary = root.querySelector('[data-bill-status-summary]');
-    const tableSelect = root.querySelector('[data-table-select]');
-    const customerSelect = root.querySelector('[data-customer-select]');
-    const coversInput = root.querySelector('[data-covers-input]');
-    const notesInput = root.querySelector('[data-notes-input]');
+    const categoryButtons = [...root.querySelectorAll('[data-pos-category]')];
+    const productCards = [...root.querySelectorAll('[data-pos-product]')];
+    const cartItems = root.querySelector('[data-cart-items]');
+    const cartCount = root.querySelector('[data-cart-count]');
+    const subtotalNode = root.querySelector('[data-cart-subtotal]');
+    const vatNode = root.querySelector('[data-cart-vat]');
+    const totalNode = root.querySelector('[data-cart-total]');
+    const cartBadge = document.getElementById('cartBadge');
+    const saleForm = root.querySelector('[data-sale-form]');
+    const holdForm = root.querySelector('[data-hold-form]');
+    const kitchenForm = root.querySelector('[data-kitchen-form]');
+    const orderTypeField = root.querySelector('[data-order-type]');
+    const customerField = root.querySelector('[data-customer-select]');
+    const tableField = root.querySelector('[data-table-select]');
+    const coversField = root.querySelector('[data-covers]');
+    const notesField = root.querySelector('[data-notes-input]');
 
-    const productData = (card) => {
+    const parseProduct = (button) => {
         try {
-            const product = JSON.parse(card.dataset.product || '{}');
-            if (!product.id || !product.name) {
-                throw new Error('Missing product id/name');
-            }
-
-            return product;
+            return JSON.parse(button.dataset.posProduct || '{}');
         } catch (error) {
-            const priceText = card.querySelector('.prod-price')?.textContent || '0';
-
-            return {
-                id: card.querySelector('.prod-name')?.textContent?.trim() || Math.random().toString(36).slice(2),
-                name: card.querySelector('.prod-name')?.textContent?.trim() || 'Unknown item',
-                category: card.dataset.category || '',
-                subcategory: card.querySelector('.prod-stock')?.textContent?.trim() || '',
-                description: card.querySelector('.prod-desc')?.textContent?.trim() || '',
-                price: Number(priceText.replace(/[^0-9.]/g, '')) || 0,
-            };
+            return {};
         }
     };
 
-    const matches = (product) => {
-        const categoryOk = state.category === 'all' || product.category === state.category;
-        if (!categoryOk) return false;
+    const totals = () => {
+        const subtotal = state.items.reduce((sum, item) => sum + (item.qty * item.price), 0);
+        const vat = subtotal * (taxRate / 100);
+        const total = subtotal + vat;
+
+        return { subtotal, vat, total };
+    };
+
+    const emptyState = () => `
+        <div class="empty-state">
+            <i class="ti ti-basket" aria-hidden="true"></i>
+            <p>No items yet</p>
+            <span>Tap a product to add</span>
+        </div>
+    `;
+
+    const syncCommonFields = (form) => {
+        form.querySelector('input[name="cart_json"]').value = JSON.stringify(state.items.map((item) => ({
+            id: item.id,
+            qty: item.qty,
+            notes: item.notes || '',
+        })));
+        const orderType = orderTypeField?.value || 'dine_in';
+        const tableValue = tableField?.value || '';
+        const customerValue = customerField?.value || '';
+        const notesValue = notesField?.value || '';
+        form.querySelectorAll('input[name="order_type"]').forEach((input) => { input.value = orderType; });
+        form.querySelectorAll('input[name="restaurant_table_id"]').forEach((input) => { input.value = tableValue; });
+        form.querySelectorAll('input[name="customer_id"]').forEach((input) => { input.value = customerValue; });
+        form.querySelectorAll('input[name="covers"]').forEach((input) => { input.value = coversField?.value || '1'; });
+        form.querySelectorAll('input[name="notes"]').forEach((input) => { input.value = notesValue; });
+    };
+
+    const submitSale = (method) => {
+        if (state.items.length === 0) return;
+        syncCommonFields(saleForm);
+        const { total } = totals();
+        let payments = [];
+
+        if (method === 'credit') {
+            if (!customerField?.value) {
+                window.alert('Choose a customer before posting a credit sale.');
+                customerField?.focus();
+                return;
+            }
+        } else {
+            payments = [{ method, amount: Number(total.toFixed(2)), reference: null }];
+        }
+
+        saleForm.querySelector('input[name="payments_json"]').value = JSON.stringify(payments);
+        saleForm.submit();
+    };
+
+    const submitOrderForm = (form) => {
+        if (state.items.length === 0) return;
+        syncCommonFields(form);
+        form.submit();
+    };
+
+    const render = () => {
+        cartItems.innerHTML = '';
+
+        if (state.items.length === 0) {
+            cartItems.innerHTML = emptyState();
+        }
+
+        state.items.forEach((item) => {
+            const row = document.createElement('div');
+            row.className = 'cart-item';
+            row.innerHTML = `
+                <span class="ci-name">${item.name}</span>
+                <div class="ci-qty">
+                    <button class="ci-btn" type="button" data-delta="-1">−</button>
+                    <span class="ci-count">${item.qty}</span>
+                    <button class="ci-btn" type="button" data-delta="1">+</button>
+                </div>
+                <span class="ci-price">${money(item.qty * item.price)}</span>
+            `;
+            row.querySelectorAll('[data-delta]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    item.qty += Number(button.dataset.delta);
+                    if (item.qty <= 0) {
+                        state.items = state.items.filter((line) => line.id !== item.id);
+                    }
+                    render();
+                });
+            });
+            cartItems.appendChild(row);
+        });
+
+        const { subtotal, vat, total } = totals();
+        subtotalNode.textContent = money(subtotal);
+        vatNode.textContent = money(vat);
+        totalNode.textContent = money(total);
+
+        const itemCount = state.items.reduce((sum, item) => sum + item.qty, 0);
+        cartCount.textContent = `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`;
+        if (cartBadge) {
+            cartBadge.dataset.count = String(itemCount);
+            cartBadge.textContent = itemCount > 0 ? String(itemCount) : '';
+        }
+    };
+
+    const matchesFilter = (product) => {
+        const categoryMatch = state.category === 'all' || product.category === state.category;
+        if (!categoryMatch) return false;
         if (!state.search) return true;
 
-        const haystack = [product.name, product.sku, product.barcode, product.category, product.subcategory, product.description]
+        const haystack = [product.name, product.category, product.subcategory, product.sku, product.barcode]
             .filter(Boolean)
             .join(' ')
             .toLowerCase();
@@ -77,209 +153,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return haystack.includes(state.search);
     };
 
-    const activeOrderType = () => root.querySelector('.segmented button.active')?.dataset.orderType || 'dine_in';
-    const activeOrderTypeLabel = () => root.querySelector('.segmented button.active')?.textContent?.trim() || 'Dine-in';
-    const selectedOptionText = (select) => select?.options?.[select.selectedIndex]?.textContent?.trim() || '';
-
-    const resetPayments = () => {
-        ['[data-cash-amount]', '[data-mpesa-amount]', '[data-card-amount]'].forEach((selector) => {
-            const field = root.querySelector(selector);
-            if (field) field.value = '0';
-        });
-        ['[data-mpesa-ref]', '[data-card-ref]'].forEach((selector) => {
-            const field = root.querySelector(selector);
-            if (field) field.value = '';
-        });
-    };
-
     const filterProducts = () => {
-        let visible = 0;
-
         productCards.forEach((card) => {
-            const isVisible = matches(productData(card));
-            card.hidden = !isVisible;
-            if (isVisible) visible++;
+            const product = parseProduct(card);
+            card.hidden = !matchesFilter(product);
         });
-
         categoryButtons.forEach((button) => {
             button.classList.toggle('active', button.dataset.posCategory === state.category);
         });
-
-        if (emptyResults) emptyResults.hidden = visible > 0;
-        if (resultsCount) resultsCount.textContent = visible + (visible === 1 ? ' product' : ' products');
-        if (activeFilter) activeFilter.textContent = state.category === 'all' ? 'All Items' : state.category;
-    };
-
-    const totals = () => {
-        const subtotal = state.items.reduce((sum, item) => sum + item.price * item.qty, 0);
-        const discountValue = numberValue('[data-discount-value]');
-        const discountType = textValue('[data-discount-type]');
-        const discount = discountType === 'percent' ? Math.min(subtotal, subtotal * Math.min(discountValue, 100) / 100) : Math.min(subtotal, discountValue);
-        const service = Math.max(0, (subtotal - discount) * numberValue('[data-service-rate]') / 100);
-        const tax = 0;
-        const total = Math.max(0, subtotal - discount + service + tax);
-        const paid = numberValue('[data-cash-amount]') + numberValue('[data-mpesa-amount]') + numberValue('[data-card-amount]');
-        const balance = Math.max(0, total - paid);
-        const change = Math.max(0, paid - total);
-
-        return { subtotal, discount, service, tax, total, paid, balance, change };
-    };
-
-    const selectedCustomer = () => textValue('[data-customer-select]');
-
-    const billPostStatus = (current) => {
-        if (state.items.length === 0) {
-            return { ok: false, tone: 'idle', text: 'Add products to start a bill.' };
-        }
-
-        if (state.creditMode) {
-            if (!selectedCustomer()) {
-                return { ok: false, tone: 'warn', text: 'Choose a customer before posting a credit sale.' };
-            }
-
-            if (current.balance <= 0) {
-                return { ok: true, tone: 'ready', text: current.change > 0 ? `Ready to post. Give ${money(current.change)} change.` : 'Ready to post and print receipt.' };
-            }
-
-            return { ok: true, tone: 'credit', text: `${money(current.balance)} will be posted to customer credit.` };
-        }
-
-        if (current.balance > 0) {
-            return { ok: false, tone: 'warn', text: `${money(current.balance)} still unpaid. Add payment or use customer credit.` };
-        }
-
-        if (current.change > 0) {
-            return { ok: true, tone: 'ready', text: `Ready to post. Give ${money(current.change)} change.` };
-        }
-
-        return { ok: true, tone: 'ready', text: 'Ready to post and print receipt.' };
-    };
-
-    const syncForms = () => {
-        const payments = [];
-        const cash = numberValue('[data-cash-amount]');
-        const mpesa = numberValue('[data-mpesa-amount]');
-        const card = numberValue('[data-card-amount]');
-        if (cash > 0) payments.push({ method: 'cash', amount: cash, reference: null });
-        if (mpesa > 0) payments.push({ method: 'mpesa', amount: mpesa, reference: textValue('[data-mpesa-ref]') });
-        if (card > 0) payments.push({ method: 'card', amount: card, reference: textValue('[data-card-ref]') });
-
-        root.querySelectorAll('input[name="cart_json"]').forEach((input) => { input.value = JSON.stringify(state.items); });
-        root.querySelectorAll('input[name="payments_json"]').forEach((input) => { input.value = JSON.stringify(payments); });
-        root.querySelectorAll('input[name="order_id"]').forEach((input) => { input.value = state.orderId || ''; });
-        root.querySelectorAll('input[name="order_type"]').forEach((input) => { input.value = activeOrderType(); });
-        root.querySelectorAll('input[name="restaurant_table_id"]').forEach((input) => { input.value = textValue('[data-table-select]'); });
-        root.querySelectorAll('input[name="customer_id"]').forEach((input) => { input.value = textValue('[data-customer-select]'); });
-        root.querySelectorAll('input[name="covers"]').forEach((input) => { input.value = textValue('[data-covers-input]') || '1'; });
-        root.querySelectorAll('input[name="discount_type"]').forEach((input) => { input.value = textValue('[data-discount-type]') || 'fixed'; });
-        root.querySelectorAll('input[name="discount_value"]').forEach((input) => { input.value = textValue('[data-discount-value]') || '0'; });
-        root.querySelectorAll('input[name="service_charge_rate"]').forEach((input) => { input.value = textValue('[data-service-rate]') || '0'; });
-        root.querySelectorAll('input[name="notes"]').forEach((input) => { input.value = textValue('[data-notes-input]'); });
-    };
-
-    const blankCartMessage = () => '<div class="bill-empty-state">No items yet<br><span>Tap a menu item to add it</span></div>';
-
-    const renderContext = () => {
-        const tableText = selectedOptionText(tableSelect);
-        const customerText = selectedOptionText(customerSelect);
-        const covers = Math.max(1, Number(coversInput?.value || 1));
-        const orderType = activeOrderType();
-        let serviceText = 'Counter sale';
-
-        if (tableText && tableSelect?.value) {
-            serviceText = tableText.split('·')[0].trim();
-        } else if (orderType === 'delivery') {
-            serviceText = customerText && customerSelect?.value ? customerText : 'Delivery order';
-        } else if (orderType === 'takeaway') {
-            serviceText = 'Takeaway counter';
-        }
-
-        if (orderTypeLabel) orderTypeLabel.textContent = activeOrderTypeLabel();
-        if (orderContext) orderContext.textContent = serviceText || 'Counter sale';
-        if (coverSummary) coverSummary.textContent = covers + (covers === 1 ? ' cover' : ' covers');
-        if (billStatusSummary) {
-            billStatusSummary.textContent = state.orderId
-                ? `Recalled ${state.orderNumber || '#' + state.orderId}`
-                : (state.items.length > 0 ? 'In progress' : 'New bill');
-        }
-    };
-
-    const render = () => {
-        const current = totals();
-        const postStatus = billPostStatus(current);
-        cartBox.innerHTML = '';
-
-        if (state.items.length === 0) {
-            cartBox.innerHTML = blankCartMessage();
-        }
-
-        state.items.forEach((item) => {
-            const row = document.createElement('div');
-            row.className = 'cart-item cart-item-advanced';
-            row.innerHTML = `
-                <div class="cart-line-top">
-                    <div>
-                        <span class="ci-name"></span>
-                        <div class="ci-meta"></div>
-                    </div>
-                    <button class="ci-remove" type="button" title="Remove item">x</button>
-                </div>
-                <div class="cart-line-actions">
-                    <button class="ci-btn" type="button" data-delta="-1">-</button>
-                    <span class="ci-count">${item.qty}</span>
-                    <button class="ci-btn" type="button" data-delta="1">+</button>
-                    <input class="inp item-note" placeholder="Item note">
-                    <span class="ci-price">${money(item.price * item.qty)}</span>
-                </div>
-            `;
-            row.querySelector('.ci-name').textContent = item.name;
-            row.querySelector('.ci-meta').textContent = `${money(item.price)} each${item.subcategory ? ' · ' + item.subcategory : ''}`;
-            row.querySelector('.item-note').value = item.notes || '';
-            row.querySelectorAll('[data-delta]').forEach((button) => {
-                button.addEventListener('click', () => {
-                    item.qty += Number(button.dataset.delta);
-                    if (item.qty <= 0) state.items = state.items.filter((line) => line.id !== item.id);
-                    render();
-                });
-            });
-            row.querySelector('.ci-remove').addEventListener('click', () => {
-                state.items = state.items.filter((line) => line.id !== item.id);
-                render();
-            });
-            row.querySelector('.item-note').addEventListener('input', (event) => {
-                item.notes = event.target.value;
-                syncForms();
-            });
-            cartBox.appendChild(row);
-        });
-
-        root.querySelector('[data-subtotal]').textContent = money(current.subtotal);
-        root.querySelector('[data-discount]').textContent = '-' + money(current.discount);
-        root.querySelector('[data-service]').textContent = money(current.service);
-        root.querySelector('[data-tax]').textContent = money(current.tax);
-        root.querySelector('[data-total]').textContent = money(current.total);
-        root.querySelector('[data-paid]').textContent = money(current.paid);
-        const changeDue = root.querySelector('[data-change]');
-        if (changeDue) changeDue.textContent = money(current.change);
-        root.querySelector('[data-balance]').textContent = money(current.balance);
-        const lineCount = root.querySelector('[data-line-count]');
-        if (lineCount) lineCount.textContent = state.items.length + ' lines';
-        const itemCount = root.querySelector('[data-item-count]');
-        const totalQty = state.items.reduce((sum, item) => sum + item.qty, 0);
-        if (itemCount) itemCount.textContent = totalQty + (totalQty === 1 ? ' item' : ' items');
-        const miniTotal = root.querySelector('[data-mini-total]');
-        if (miniTotal) miniTotal.textContent = money(current.total);
-        if (postBillButton) postBillButton.disabled = !postStatus.ok;
-        if (checkoutStatus) {
-            checkoutStatus.textContent = postStatus.text;
-            checkoutStatus.dataset.tone = postStatus.tone;
-        }
-        if (recalledOrder) {
-            recalledOrder.hidden = !state.orderId;
-            recalledOrder.textContent = state.orderId ? `Recalled bill ${state.orderNumber || '#' + state.orderId}. Posting payment will close this open order.` : '';
-        }
-        renderContext();
-        syncForms();
     };
 
     categoryButtons.forEach((button) => {
@@ -294,137 +175,30 @@ document.addEventListener('DOMContentLoaded', () => {
         filterProducts();
     });
 
-    clearSearch?.addEventListener('click', () => {
-        state.search = '';
-        if (searchInput) searchInput.value = '';
-        filterProducts();
-        searchInput?.focus();
-    });
-
-    productCards.forEach((card) => {
-        card.addEventListener('click', () => {
-            const product = productData(card);
-            const found = state.items.find((item) => item.id === product.id);
-            if (found) found.qty++;
-            else state.items.push({ ...product, id: product.id || product.name, price: Number(product.price || 0), qty: 1, notes: '' });
-            render();
-        });
-    });
-
-    clearCart?.addEventListener('click', () => {
-        state.items = [];
-        state.orderId = '';
-        state.orderNumber = '';
-        state.creditMode = false;
-        resetPayments();
-        render();
-    });
-
-    root.querySelectorAll('[data-discount-type],[data-discount-value],[data-service-rate],[data-cash-amount],[data-mpesa-amount],[data-card-amount],[data-mpesa-ref],[data-card-ref],[data-table-select],[data-customer-select],[data-covers-input],[data-notes-input]').forEach((field) => {
-        field.addEventListener('input', render);
-        field.addEventListener('change', render);
-    });
-
-    root.querySelectorAll('.segmented button').forEach((button) => {
+    productCards.forEach((button) => {
         button.addEventListener('click', () => {
-            root.querySelectorAll('.segmented button').forEach((other) => other.classList.remove('active'));
-            button.classList.add('active');
+            const product = parseProduct(button);
+            const line = state.items.find((item) => item.id === product.id);
+            if (line) {
+                line.qty += 1;
+            } else {
+                state.items.push({ id: product.id, name: product.name, price: Number(product.price || 0), qty: 1, notes: '' });
+            }
             render();
         });
     });
 
-    root.querySelectorAll('[data-pay-full]').forEach((button) => {
+    root.querySelectorAll('[data-pay-method]').forEach((button) => {
+        button.addEventListener('click', () => submitSale(button.dataset.payMethod));
+    });
+
+    root.querySelectorAll('[data-submit-order]').forEach((button) => {
         button.addEventListener('click', () => {
-            const method = button.dataset.payFull;
-            const current = totals();
-            state.creditMode = false;
-            const fields = {
-                cash: root.querySelector('[data-cash-amount]'),
-                mpesa: root.querySelector('[data-mpesa-amount]'),
-                card: root.querySelector('[data-card-amount]'),
-            };
-            Object.values(fields).forEach((field) => {
-                if (field) field.value = '0';
-            });
-            if (fields[method]) fields[method].value = current.total.toFixed(2);
-            render();
+            if (button.dataset.submitOrder === 'hold') submitOrderForm(holdForm);
+            if (button.dataset.submitOrder === 'kitchen') submitOrderForm(kitchenForm);
         });
     });
 
-    root.querySelector('[data-pay-credit]')?.addEventListener('click', () => {
-        state.creditMode = true;
-        render();
-    });
-
-    root.querySelectorAll('[data-cash-amount],[data-mpesa-amount],[data-card-amount]').forEach((field) => {
-        field.addEventListener('input', () => {
-            if (numberValue('[data-cash-amount]') + numberValue('[data-mpesa-amount]') + numberValue('[data-card-amount]') > 0) {
-                state.creditMode = false;
-                render();
-            }
-        });
-    });
-
-    root.querySelectorAll('[data-open-order]').forEach((button) => {
-        button.addEventListener('click', () => {
-            let order;
-            try {
-                order = JSON.parse(button.dataset.openOrder || '{}');
-            } catch (error) {
-                order = {};
-            }
-
-            state.orderId = order.id || '';
-            state.orderNumber = order.order_number || '';
-            state.creditMode = false;
-            resetPayments();
-            state.items = (order.items || []).map((item) => ({
-                ...item,
-                id: item.id || item.name,
-                price: Number(item.price || 0),
-                qty: Number(item.qty || 0),
-                notes: item.notes || '',
-            })).filter((item) => item.qty > 0);
-
-            if (tableSelect) tableSelect.value = order.restaurant_table_id || '';
-            if (customerSelect) customerSelect.value = order.customer_id || '';
-            if (coversInput) coversInput.value = order.covers || 1;
-            if (notesInput) notesInput.value = order.notes || '';
-
-            root.querySelectorAll('.segmented button').forEach((item) => {
-                item.classList.toggle('active', item.dataset.orderType === order.order_type);
-            });
-
-            render();
-        });
-    });
-
-    root.querySelectorAll('[data-pos-form]').forEach((form) => {
-        form.addEventListener('submit', (event) => {
-            if (state.items.length === 0) {
-                event.preventDefault();
-                cartBox.innerHTML = '<div class="bill-empty-state" style="color:var(--red)">Add at least one product before posting this bill.</div>';
-                return;
-            }
-
-            if (form.dataset.posForm === 'sale') {
-                const current = totals();
-                const postStatus = billPostStatus(current);
-                if (!postStatus.ok) {
-                    event.preventDefault();
-                    if (checkoutStatus) {
-                        checkoutStatus.textContent = postStatus.text;
-                        checkoutStatus.dataset.tone = postStatus.tone;
-                    }
-                    return;
-                }
-            }
-
-            syncForms();
-        });
-    });
-
-    root.querySelector('.segmented button')?.classList.add('active');
     filterProducts();
     render();
 });
@@ -466,61 +240,4 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     filter();
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    const root = document.querySelector('.purchase-page');
-    if (!root || root.dataset.purchaseReady === '1') return;
-    root.dataset.purchaseReady = '1';
-
-    const money = (value) => 'KES ' + Number(value || 0).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
-    const lines = [...root.querySelectorAll('[data-purchase-line]')];
-    const totalBadge = root.querySelector('[data-purchase-total]');
-    const status = root.querySelector('[data-purchase-status]');
-    const submit = root.querySelector('[data-purchase-submit]');
-
-    const refresh = () => {
-        let total = 0;
-        let validLines = 0;
-
-        lines.forEach((line) => {
-            const product = line.querySelector('select[name="product_id[]"]');
-            const qty = line.querySelector('input[name="quantity[]"]');
-            const cost = line.querySelector('input[name="unit_cost[]"]');
-            const lineTotal = line.querySelector('[data-line-total]');
-            const amount = Math.max(0, Number(qty?.value || 0)) * Math.max(0, Number(cost?.value || 0));
-
-            if (product?.value && Number(qty?.value || 0) > 0) validLines++;
-            total += amount;
-            if (lineTotal) lineTotal.textContent = money(amount);
-        });
-
-        if (totalBadge) totalBadge.textContent = money(total);
-        if (submit) submit.disabled = validLines === 0;
-        if (status) {
-            status.textContent = validLines === 0 ? 'Add at least one stock-in line.' : `${validLines} line${validLines === 1 ? '' : 's'} ready. Stock will increase immediately after posting.`;
-            status.dataset.tone = validLines === 0 ? 'warn' : 'ready';
-        }
-    };
-
-    lines.forEach((line) => {
-        const product = line.querySelector('select[name="product_id[]"]');
-        const cost = line.querySelector('input[name="unit_cost[]"]');
-        product?.addEventListener('change', () => {
-            const selected = product.selectedOptions[0];
-            if (cost && !cost.value && selected?.dataset.cost) {
-                cost.value = Number(selected.dataset.cost || 0).toFixed(2);
-            }
-            refresh();
-        });
-        line.querySelectorAll('input,select').forEach((field) => {
-            field.addEventListener('input', refresh);
-            field.addEventListener('change', refresh);
-        });
-    });
-
-    refresh();
 });
