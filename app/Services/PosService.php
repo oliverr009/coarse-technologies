@@ -142,10 +142,17 @@ class PosService
 
             $tableId = $options['restaurant_table_id'] ?? null;
             $orderType = $options['order_type'] ?? ($tableId ? 'dine_in' : 'takeaway');
-            $subtotal = 0;
+            $existingOrderId = $options['order_id'] ?? null;
 
-            $order = Order::query()->create([
-                'order_number' => Numbers::next('ORD', 'orders', 'order_number'),
+            $order = $existingOrderId
+                ? Order::query()->with('items')->findOrFail((int) $existingOrderId)
+                : new Order();
+
+            if (!$order->exists) {
+                $order->order_number = Numbers::next('ORD', 'orders', 'order_number');
+            }
+
+            $order->fill([
                 'order_type' => $orderType,
                 'restaurant_table_id' => $tableId,
                 'customer_id' => $options['customer_id'] ?? null,
@@ -154,14 +161,20 @@ class PosService
                 'covers' => max(1, (int) ($options['covers'] ?? 1)),
                 'notes' => $options['notes'] ?? null,
                 'sent_to_kitchen_at' => $sentAt,
+                'subtotal' => 0,
             ]);
+            $order->save();
 
+            $order->items()->delete();
+
+            $subtotal = 0;
             foreach ($cart as $line) {
                 $product = Product::query()->findOrFail((int) $line['id']);
                 $qty = max(0, (float) ($line['qty'] ?? 0));
                 if ($qty <= 0) {
                     continue;
                 }
+
                 $lineTotal = $qty * (float) $product->selling_price;
                 $subtotal += $lineTotal;
 
@@ -182,7 +195,7 @@ class PosService
                 RestaurantTable::query()->whereKey($tableId)->update(['status' => 'occupied']);
             }
 
-            return $order->load('items');
+            return $order->load(['items', 'table', 'customer']);
         });
     }
 

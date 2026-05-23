@@ -29,96 +29,161 @@
 @endphp
 
 @section('content')
-<div data-pos-root data-tax-rate="{{ $taxRate }}">
-    <div class="pos-layout">
-        <div class="pos-left">
-            <div class="inp-wrap">
-                <i class="ti ti-scan inp-icon" aria-hidden="true"></i>
-                <input class="inp inp-pad" placeholder="Search product or scan barcode…" data-pos-search aria-label="Search products">
-            </div>
+@include('pos.partials.sell-screen-v3-styles')
+<div class="sell-screen-v3" data-pos-root data-tax-rate="{{ $taxRate }}" data-default-service-rate="10" data-cashier="{{ auth()->user()->name ?? 'Cashier' }}" data-selected-order="{{ $selectedOrderId }}">
+    <div class="bills-bar">
+        <button class="bill-tab active" type="button" data-draft-bill>
+            <span class="bt-status bts-open"></span>
+            <span class="bt-name">Draft Bill</span>
+            <span class="bt-amt" data-draft-total>KES 0</span>
+        </button>
+        @foreach($openOrders as $order)
+            @php
+                $orderPayload = [
+                    'id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'order_type' => $order->order_type,
+                    'restaurant_table_id' => $order->restaurant_table_id,
+                    'customer_id' => $order->customer_id,
+                    'customer_name' => $order->customer?->name,
+                    'table_name' => $order->table?->name,
+                    'covers' => $order->covers,
+                    'notes' => $order->notes,
+                    'status' => $order->status,
+                    'subtotal' => (float) $order->subtotal,
+                    'items' => $order->items->map(function ($item) use ($products) {
+                        $product = $products->firstWhere('id', $item->product_id);
 
-            <div class="pos-filter-tabs" role="tablist" aria-label="Product categories">
-                <button class="pos-filter-tab active" type="button" data-pos-category="all">All Items</button>
-                @foreach($categories as $category)
-                    <button class="pos-filter-tab" type="button" data-pos-category="{{ $category }}">{{ $categoryEmoji[$category] ?? '🍽️' }} {{ $category }}</button>
-                @endforeach
-            </div>
-
-            <div class="pos-product-grid">
-                @foreach($products as $product)
-                    @php
-                        $productPayload = [
-                            'id' => $product->id,
-                            'name' => $product->name,
-                            'price' => (float) $product->selling_price,
-                            'category' => $product->category?->name,
-                            'subcategory' => $product->subcategory,
-                            'sku' => $product->sku,
-                            'barcode' => $product->barcode,
+                        return [
+                            'id' => $item->product_id,
+                            'name' => $item->product_name,
+                            'price' => (float) $item->unit_price,
+                            'qty' => (float) $item->quantity,
+                            'notes' => $item->notes,
+                            'category' => $product?->category?->name,
+                            'subcategory' => $product?->subcategory,
                         ];
-                    @endphp
-                    <button class="pos-product-card" type="button" data-pos-product="{{ json_encode($productPayload, $jsonFlags) }}" data-pos-product-category="{{ $product->category?->name }}" aria-label="Add {{ $product->name }}, KES {{ number_format($product->selling_price, 2) }}">
-                        <div class="pos-product-icon" aria-hidden="true">{{ $categoryEmoji[$product->category?->name] ?? '🍽️' }}</div>
-                        <div class="pos-product-name">{{ $product->name }}</div>
-                        <div class="pos-product-price">{{ number_format($product->selling_price, 0) }}</div>
-                        <div class="pos-product-stock">{{ $product->subcategory ?: 'Available now' }}</div>
-                    </button>
-                @endforeach
-            </div>
-        </div>
+                    })->values(),
+                ];
+                $statusClass = $order->status === 'held' ? 'bts-hold' : 'bts-kitchen';
+            @endphp
+            <button class="bill-tab" type="button" data-open-order="{{ json_encode($orderPayload, $jsonFlags) }}">
+                <span class="bt-status {{ $statusClass }}"></span>
+                <span class="bt-name">{{ $order->table?->name ?? $order->order_number }}</span>
+                <span class="bt-amt">KES {{ number_format($order->subtotal, 0) }}</span>
+            </button>
+        @endforeach
+        <button class="new-bill-btn" type="button" data-new-bill aria-label="New bill">+</button>
+    </div>
 
-        <div class="pos-right">
-            <div class="cart-title"><i class="ti ti-shopping-cart" style="color:var(--blue)" aria-hidden="true"></i> Current Order <span style="margin-left:auto;font-size:11px;color:var(--text3)" data-cart-count>0 items</span></div>
-
-            <div class="cart-items" data-cart-items>
-                <div class="empty-state">
-                    <i class="ti ti-basket" aria-hidden="true"></i>
-                    <p>No items yet</p>
-                    <span>Tap a product to add</span>
+    <div class="shell">
+        <div class="left">
+            <div class="left-top">
+                <div class="order-type-group">
+                    <button class="ot active-dine" type="button" data-order-type-btn="dine_in"><i class="ti ti-tools-kitchen-2" aria-hidden="true"></i>Dine-in</button>
+                    <button class="ot" type="button" data-order-type-btn="takeaway"><i class="ti ti-shopping-bag" aria-hidden="true"></i>Takeaway</button>
+                    <button class="ot" type="button" data-order-type-btn="delivery"><i class="ti ti-bike" aria-hidden="true"></i>Delivery</button>
+                </div>
+                <div class="search-wrap">
+                    <i class="ti ti-search search-icon" aria-hidden="true"></i>
+                    <input class="search-inp" data-pos-search placeholder="Search product or scan barcode…">
                 </div>
             </div>
 
-            <div class="cart-divider"></div>
-
-            <div class="cart-totals">
-                <div class="ct-row"><span>Subtotal</span><span data-cart-subtotal style="font-family:'Space Mono',monospace">KES 0</span></div>
-                <div class="ct-row"><span>VAT ({{ number_format($taxRate, 0) }}%)</span><span data-cart-vat style="font-family:'Space Mono',monospace">KES 0</span></div>
-                <div class="ct-total"><span>TOTAL</span><span class="ct-total-val" data-cart-total>KES 0</span></div>
+            <div class="cat-row">
+                <button class="cat active" type="button" data-pos-category="all">All Items</button>
+                @foreach($categories as $category)
+                    <button class="cat" type="button" data-pos-category="{{ $category }}">{{ $categoryEmoji[$category] ?? '🍽️' }} {{ $category }}</button>
+                @endforeach
             </div>
 
-            <div class="pos-side-tools">
-                <div class="pos-meta-grid">
-                    <select class="inp" data-order-type>
-                        <option value="dine_in">Dine-in</option>
-                        <option value="takeaway">Takeaway</option>
-                        <option value="delivery">Delivery</option>
+            <div class="product-area">
+                <div class="prod-grid">
+                    @foreach($products as $product)
+                        @php
+                            $productPayload = [
+                                'id' => $product->id,
+                                'name' => $product->name,
+                                'price' => (float) $product->selling_price,
+                                'category' => $product->category?->name,
+                                'subcategory' => $product->subcategory,
+                                'sku' => $product->sku,
+                                'barcode' => $product->barcode,
+                            ];
+                        @endphp
+                        <button class="prod" type="button" data-pos-product="{{ json_encode($productPayload, $jsonFlags) }}">
+                            <span class="prod-emoji" aria-hidden="true">{{ $categoryEmoji[$product->category?->name] ?? '🍽️' }}</span>
+                            <div class="prod-name">{{ $product->name }}</div>
+                            <div class="prod-price">{{ number_format($product->selling_price, 0) }}</div>
+                            <div class="prod-meta">
+                                <span class="prod-cat">{{ $product->category?->name ?? 'Menu' }}</span>
+                                <span class="prod-stock {{ $product->is_active ? 'ps-ok' : 'ps-low' }}">{{ $product->subcategory ?: 'Ready' }}</span>
+                            </div>
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+
+        <div class="right">
+            <div class="order-head">
+                <div class="order-meta-row">
+                    <div class="order-num" data-order-number>ORD-DRAFT</div>
+                    <div class="order-badges">
+                        <span class="bdg bdg-blue" data-bill-mode>Dine-in</span>
+                        <span class="bdg bdg-gold" data-bill-status>Open</span>
+                    </div>
+                </div>
+                <div class="selects-row">
+                    <select class="ord-sel" data-waiter-select>
+                        <option value="{{ auth()->user()->name ?? 'Cashier' }}">{{ auth()->user()->name ?? 'Cashier' }}</option>
                     </select>
-                    <input class="inp" type="number" min="1" max="99" value="1" data-covers placeholder="Covers">
-                    <select class="inp" data-customer-select>
+                    <select class="ord-sel" data-customer-select>
                         <option value="">Walk-in customer</option>
                         @foreach($customers as $customer)
                             <option value="{{ $customer->id }}">{{ $customer->name }}</option>
                         @endforeach
                     </select>
-                    <select class="inp" data-table-select>
+                    <select class="ord-sel" data-table-select>
                         <option value="">No table</option>
                         @foreach($tables as $table)
                             <option value="{{ $table->id }}">{{ $table->name }} · {{ $table->status }}</option>
                         @endforeach
                     </select>
                 </div>
-                <textarea class="inp" rows="2" data-notes-input placeholder="Bill notes, allergies, delivery details"></textarea>
+                <textarea class="bill-note" rows="2" data-notes-input placeholder="Bill notes, allergies, service notes, delivery details"></textarea>
             </div>
 
-            <div class="pay-btns">
-                <button class="pay-btn pb-mpesa" type="button" data-pay-method="mpesa" aria-label="Pay via M-Pesa"><i class="ti ti-device-mobile" aria-hidden="true"></i> Pay via M-Pesa</button>
-                <button class="pay-btn pb-cash" type="button" data-pay-method="cash" aria-label="Pay Cash"><i class="ti ti-cash" aria-hidden="true"></i> Pay Cash</button>
-                <button class="pay-btn pb-credit" type="button" data-pay-method="credit" aria-label="Credit Account"><i class="ti ti-credit-card" aria-hidden="true"></i> Credit Account</button>
+            <div class="cart" data-cart-items>
+                <div class="empty-cart">
+                    <i class="ti ti-basket" aria-hidden="true"></i>
+                    <p>No items yet</p>
+                </div>
             </div>
 
-            <div class="pos-quick-actions">
-                <button class="btn btn-ghost btn-sm" type="button" data-submit-order="hold">Hold Bill</button>
-                <button class="btn btn-ghost btn-sm" type="button" data-submit-order="kitchen">Send to Kitchen</button>
+            <div class="totals">
+                <div class="tot-row"><span>Subtotal</span><span data-subtotal>KES 0</span></div>
+                <div class="tot-row disc-row" data-discount-row hidden><span>Discount</span><span data-discount>KES 0</span></div>
+                <div class="tot-row"><span>Service Charge (10%)</span><span data-service>KES 0</span></div>
+                <div class="tot-row"><span>VAT ({{ number_format($taxRate, 0) }}%)</span><span data-tax>KES 0</span></div>
+                <div class="tot-divider"></div>
+                <div class="tot-total"><span>TOTAL</span><span class="tot-total-val" data-total>KES 0</span></div>
+                <div class="tot-count" data-cart-count>0 items</div>
+            </div>
+
+            <div class="pay-area">
+                <div class="pay-grid">
+                    <button class="pay-btn pb-mpesa" type="button" data-pay-method="mpesa"><i class="ti ti-device-mobile" aria-hidden="true"></i> M-Pesa</button>
+                    <button class="pay-btn pb-cash" type="button" data-pay-method="cash"><i class="ti ti-cash" aria-hidden="true"></i> Cash</button>
+                    <button class="pay-btn pb-card" type="button" data-pay-method="card"><i class="ti ti-credit-card" aria-hidden="true"></i> Card</button>
+                    <button class="pay-btn pb-credit" type="button" data-pay-method="credit"><i class="ti ti-user-dollar" aria-hidden="true"></i> Credit</button>
+                </div>
+                <div class="action-row">
+                    <button class="act-btn disc-btn" type="button" data-open-discount><i class="ti ti-discount" aria-hidden="true"></i> Discount</button>
+                    <button class="act-btn hold-btn" type="button" data-submit-order="hold"><i class="ti ti-pause" aria-hidden="true"></i> Hold</button>
+                    <button class="act-btn split-btn" type="button" data-open-split><i class="ti ti-scissors" aria-hidden="true"></i> Split</button>
+                </div>
+                <button class="kitchen-btn" type="button" data-submit-order="kitchen"><i class="ti ti-printer" aria-hidden="true"></i> <span data-order-button-label>Print Kitchen Order</span></button>
             </div>
 
             <form method="post" action="{{ route('pos.sale') }}" data-sale-form hidden>
@@ -131,29 +196,119 @@
                 <input type="hidden" name="customer_id">
                 <input type="hidden" name="discount_type" value="fixed">
                 <input type="hidden" name="discount_value" value="0">
-                <input type="hidden" name="service_charge_rate" value="0">
+                <input type="hidden" name="service_charge_rate" value="10">
                 <input type="hidden" name="notes">
             </form>
 
             <form method="post" action="{{ route('pos.hold') }}" data-hold-form hidden>
                 @csrf
                 <input type="hidden" name="cart_json">
+                <input type="hidden" name="order_id">
                 <input type="hidden" name="order_type">
                 <input type="hidden" name="restaurant_table_id">
                 <input type="hidden" name="customer_id">
-                <input type="hidden" name="covers">
+                <input type="hidden" name="covers" value="1">
                 <input type="hidden" name="notes">
             </form>
 
             <form method="post" action="{{ route('pos.kitchen') }}" data-kitchen-form hidden>
                 @csrf
                 <input type="hidden" name="cart_json">
+                <input type="hidden" name="order_id">
                 <input type="hidden" name="order_type">
                 <input type="hidden" name="restaurant_table_id">
                 <input type="hidden" name="customer_id">
-                <input type="hidden" name="covers">
+                <input type="hidden" name="covers" value="1">
                 <input type="hidden" name="notes">
             </form>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="mVoid">
+        <div class="modal">
+            <div class="modal-head"><span class="modal-title" style="color:var(--red)"><i class="ti ti-ban"></i> Void Item</span><button class="modal-x" type="button" data-close-modal="mVoid">×</button></div>
+            <div class="lbl">Item</div>
+            <div id="voidItemLabel" style="font-size:13px;font-weight:600;margin-bottom:14px;color:var(--text)"></div>
+            <div class="lbl">Reason (required)</div>
+            <select class="field-inp" id="voidReason">
+                <option value="">Select reason…</option>
+                <option>Customer changed mind</option>
+                <option>Wrong item entered</option>
+                <option>Item unavailable</option>
+                <option>Quality issue</option>
+                <option>Manager override</option>
+            </select>
+            <div class="lbl">Manager PIN</div>
+            <input class="field-inp" type="password" id="voidPin" placeholder="••••" maxlength="4">
+            <div class="modal-footer">
+                <button class="btn btn-g" type="button" data-close-modal="mVoid">Cancel</button>
+                <button class="btn btn-r" type="button" data-confirm-void><i class="ti ti-ban"></i> Void</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="mNote">
+        <div class="modal">
+            <div class="modal-head"><span class="modal-title"><i class="ti ti-pencil" style="color:var(--blue)"></i> Item Note</span><button class="modal-x" type="button" data-close-modal="mNote">×</button></div>
+            <div class="lbl" id="noteLbl">Note for item</div>
+            <div class="chip-row">
+                <span class="chip" data-note-chip="No onions">No onions</span>
+                <span class="chip" data-note-chip="Extra sauce">Extra sauce</span>
+                <span class="chip" data-note-chip="Well done">Well done</span>
+                <span class="chip" data-note-chip="No chilli">No chilli</span>
+                <span class="chip" data-note-chip="Gluten-free">Gluten-free</span>
+                <span class="chip" data-note-chip="No salt">No salt</span>
+            </div>
+            <textarea class="field-inp" id="noteText" rows="3" placeholder="Custom note…" style="resize:none;margin-bottom:0"></textarea>
+            <div class="modal-footer">
+                <button class="btn btn-g" type="button" data-close-modal="mNote">Cancel</button>
+                <button class="btn btn-p" type="button" data-save-note><i class="ti ti-check"></i> Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="mDisc">
+        <div class="modal">
+            <div class="modal-head"><span class="modal-title" style="color:var(--gold)"><i class="ti ti-discount"></i> Apply Discount</span><button class="modal-x" type="button" data-close-modal="mDisc">×</button></div>
+            <div style="display:flex;gap:10px">
+                <div style="flex:1"><div class="lbl">Discount %</div><input class="field-inp" type="number" id="discPct" placeholder="e.g. 10" min="0" max="100"></div>
+                <div style="flex:1"><div class="lbl">Fixed (KES)</div><input class="field-inp" type="number" id="discFixed" placeholder="e.g. 200"></div>
+            </div>
+            <div class="lbl">Reason</div>
+            <select class="field-inp" id="discReason">
+                <option>Loyalty discount</option>
+                <option>Staff meal</option>
+                <option>Complaint resolution</option>
+                <option>Special offer</option>
+                <option>Manager override</option>
+            </select>
+            <div class="lbl">Manager PIN (required for >10%)</div>
+            <input class="field-inp" type="password" id="discPin" placeholder="••••" maxlength="4">
+            <div class="modal-footer">
+                <button class="btn btn-g" type="button" data-close-modal="mDisc">Cancel</button>
+                <button class="btn btn-gold" type="button" data-apply-discount><i class="ti ti-discount"></i> Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="mSplit">
+        <div class="modal">
+            <div class="modal-head"><span class="modal-title" style="color:var(--blue)"><i class="ti ti-scissors"></i> Split Bill</span><button class="modal-x" type="button" data-close-modal="mSplit">×</button></div>
+            <div style="background:var(--bg3);border-radius:9px;padding:12px;margin-bottom:14px;display:flex;justify-content:space-between">
+                <span style="font-size:12px;color:var(--text2)">Bill Total</span>
+                <span id="splitBillTotal" style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;color:var(--blue)">KES 0</span>
+            </div>
+            <div class="lbl">Number of ways</div>
+            <div class="split-ways">
+                <button class="btn btn-g" type="button" data-split-change="-1">−</button>
+                <span class="split-n" id="splitN">2</span>
+                <button class="btn btn-g" type="button" data-split-change="1">+</button>
+                <span style="font-size:13px;color:var(--text2)">= <strong id="splitPer" style="color:var(--text)">KES 0</strong> each</span>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-g" type="button" data-close-modal="mSplit">Cancel</button>
+                <button class="btn btn-p" type="button" data-confirm-split><i class="ti ti-scissors"></i> Split & Pay</button>
+            </div>
         </div>
     </div>
 </div>

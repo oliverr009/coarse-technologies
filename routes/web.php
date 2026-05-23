@@ -14,6 +14,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::middleware('auth')->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
+    Route::get('/orders', [PosController::class, 'orders'])->name('orders');
     Route::post('/pos/sale', [PosController::class, 'postSale'])->name('pos.sale');
     Route::post('/pos/hold', [PosController::class, 'holdOrder'])->name('pos.hold');
     Route::post('/pos/kitchen', [PosController::class, 'sendToKitchen'])->name('pos.kitchen');

@@ -2,6 +2,7 @@
     $nav = [
         ['dashboard', 'Dashboard', 'ti ti-layout-dashboard', route('dashboard')],
         ['pos.index', 'POS Sell', 'ti ti-basket', route('pos.index')],
+        ['orders', 'Orders', 'ti ti-receipt-2', route('orders')],
         ['inventory', 'Inventory', 'ti ti-package', route('inventory')],
         ['tables', 'Tables', 'ti ti-layout-grid', route('tables')],
         ['kds', 'Kitchen Display', 'ti ti-chef-hat', route('kds')],
@@ -46,7 +47,7 @@
             <a class="dock-item {{ request()->routeIs($routeName) ? 'active' : '' }}" href="{{ $url }}" @if(request()->routeIs($routeName)) aria-current="page" @endif>
                 <i class="{{ $icon }}" aria-hidden="true"></i><span class="dock-label">{{ $label }}</span>
             </a>
-            @if(in_array($routeName, ['inventory', 'recipes', 'credit'], true))
+            @if(in_array($routeName, ['orders', 'recipes', 'credit'], true))
                 <div class="dock-sep" aria-hidden="true"></div>
             @endif
         @endforeach

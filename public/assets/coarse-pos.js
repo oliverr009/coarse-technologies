@@ -7,113 +7,203 @@ document.addEventListener('DOMContentLoaded', () => {
         items: [],
         category: 'all',
         search: '',
+        orderId: '',
+        orderNumber: 'ORD-DRAFT',
+        orderType: 'dine_in',
+        status: 'open',
+        held: false,
+        discountType: 'fixed',
+        discountValue: 0,
+        splitWays: 2,
+        noteItemId: null,
+        voidItemId: null,
     };
 
     const taxRate = Number(root.dataset.taxRate || 0);
+    const serviceRate = Number(root.dataset.defaultServiceRate || 10);
+    const waiterName = root.dataset.cashier || 'Cashier';
+    const selectedOrderId = String(root.dataset.selectedOrder || '');
+    const modalIds = ['mVoid', 'mNote', 'mDisc', 'mSplit'];
     const money = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-    const searchInput = root.querySelector('[data-pos-search]');
+
+    const orderTypeButtons = [...root.querySelectorAll('[data-order-type-btn]')];
     const categoryButtons = [...root.querySelectorAll('[data-pos-category]')];
-    const productCards = [...root.querySelectorAll('[data-pos-product]')];
-    const cartItems = root.querySelector('[data-cart-items]');
-    const cartCount = root.querySelector('[data-cart-count]');
-    const subtotalNode = root.querySelector('[data-cart-subtotal]');
-    const vatNode = root.querySelector('[data-cart-vat]');
-    const totalNode = root.querySelector('[data-cart-total]');
+    const productButtons = [...root.querySelectorAll('[data-pos-product]')];
+    const searchInput = root.querySelector('[data-pos-search]');
+    const cartBox = root.querySelector('[data-cart-items]');
+    const tableSelect = root.querySelector('[data-table-select]');
+    const customerSelect = root.querySelector('[data-customer-select]');
+    const waiterSelect = root.querySelector('[data-waiter-select]');
+    const notesInput = root.querySelector('[data-notes-input]');
+    const draftTotal = root.querySelector('[data-draft-total]');
+    const subtotalNode = root.querySelector('[data-subtotal]');
+    const discountNode = root.querySelector('[data-discount]');
+    const discountRow = root.querySelector('[data-discount-row]');
+    const serviceNode = root.querySelector('[data-service]');
+    const taxNode = root.querySelector('[data-tax]');
+    const totalNode = root.querySelector('[data-total]');
+    const orderNumberNode = root.querySelector('[data-order-number]');
+    const billModeNode = root.querySelector('[data-bill-mode]');
+    const billStatusNode = root.querySelector('[data-bill-status]');
+    const orderButtonLabel = root.querySelector('[data-order-button-label]');
+    const cartCountNode = root.querySelector('[data-cart-count]');
+    const draftBillButton = root.querySelector('[data-draft-bill]');
+    const openBillButtons = [...root.querySelectorAll('[data-open-order]')];
     const cartBadge = document.getElementById('cartBadge');
     const saleForm = root.querySelector('[data-sale-form]');
     const holdForm = root.querySelector('[data-hold-form]');
     const kitchenForm = root.querySelector('[data-kitchen-form]');
-    const orderTypeField = root.querySelector('[data-order-type]');
-    const customerField = root.querySelector('[data-customer-select]');
-    const tableField = root.querySelector('[data-table-select]');
-    const coversField = root.querySelector('[data-covers]');
-    const notesField = root.querySelector('[data-notes-input]');
 
-    const parseProduct = (button) => {
+    const stationFor = (item) => {
+        const category = String(item.category || '').toLowerCase();
+        if (/(drink|bar|coffee|tea|lemonade|juice|milkshake|mocktail|cocktail)/.test(category)) return { label: 'BAR', className: 'cs-b' };
+        if (/(salad|dessert)/.test(category)) return { label: 'COLD', className: 'cs-c' };
+        return { label: 'KITCHEN', className: 'cs-k' };
+    };
+
+    const kdsClass = (status) => ({
+        pending: 'kds-pending',
+        cooking: 'kds-cooking',
+        ready: 'kds-ready',
+    }[status || 'pending'] || 'kds-pending');
+
+    const parseJson = (text) => {
         try {
-            return JSON.parse(button.dataset.posProduct || '{}');
-        } catch (error) {
+            return JSON.parse(text || '{}');
+        } catch (_error) {
             return {};
         }
     };
 
     const totals = () => {
         const subtotal = state.items.reduce((sum, item) => sum + (item.qty * item.price), 0);
-        const vat = subtotal * (taxRate / 100);
-        const total = subtotal + vat;
+        const rawDiscount = state.discountType === 'percent'
+            ? subtotal * Math.min(state.discountValue, 100) / 100
+            : state.discountValue;
+        const discount = Math.min(subtotal, Math.max(0, rawDiscount));
+        const service = Math.max(0, (subtotal - discount) * (serviceRate / 100));
+        const taxable = Math.max(0, subtotal - discount + service);
+        const tax = taxable * (taxRate / 100);
+        const total = taxable + tax;
 
-        return { subtotal, vat, total };
+        return { subtotal, discount, service, tax, total };
     };
 
-    const emptyState = () => `
-        <div class="empty-state">
-            <i class="ti ti-basket" aria-hidden="true"></i>
-            <p>No items yet</p>
-            <span>Tap a product to add</span>
-        </div>
-    `;
+    const updateBadges = () => {
+        billModeNode.textContent = {
+            dine_in: 'Dine-in',
+            takeaway: 'Takeaway',
+            delivery: 'Delivery',
+        }[state.orderType] || 'Dine-in';
 
-    const syncCommonFields = (form) => {
-        form.querySelector('input[name="cart_json"]').value = JSON.stringify(state.items.map((item) => ({
+        if (state.held) {
+            billStatusNode.textContent = 'On Hold';
+            billStatusNode.className = 'bdg bdg-orange';
+        } else if (state.status === 'pending') {
+            billStatusNode.textContent = 'Pending';
+            billStatusNode.className = 'bdg bdg-green';
+        } else {
+            billStatusNode.textContent = 'Open';
+            billStatusNode.className = 'bdg bdg-gold';
+        }
+    };
+
+    const orderButtonText = () => {
+        if (state.items.length === 0) return 'Print Kitchen Order';
+        const stations = new Set(state.items.map((item) => stationFor(item).label));
+        if (stations.size === 1 && stations.has('BAR')) return 'Print Bar Order';
+        if (stations.size > 1) return 'Print Kitchen & Bar Order';
+        return 'Print Kitchen Order';
+    };
+
+    const setActiveOrderTypeButton = () => {
+        orderTypeButtons.forEach((button) => {
+            button.classList.remove('active-dine', 'active-take', 'active-del');
+            if (button.dataset.orderTypeBtn === state.orderType) {
+                button.classList.add(
+                    state.orderType === 'dine_in' ? 'active-dine' : state.orderType === 'takeaway' ? 'active-take' : 'active-del'
+                );
+            }
+        });
+    };
+
+    const setActiveBillButton = (buttonToActivate = null) => {
+        [draftBillButton, ...openBillButtons].forEach((button) => {
+            button?.classList.toggle('active', button === buttonToActivate);
+        });
+    };
+
+    const syncForms = () => {
+        const { total } = totals();
+        const cartJson = JSON.stringify(state.items.map((item) => ({
             id: item.id,
             qty: item.qty,
-            notes: item.notes || '',
+            notes: item.note || '',
         })));
-        const orderType = orderTypeField?.value || 'dine_in';
-        const tableValue = tableField?.value || '';
-        const customerValue = customerField?.value || '';
-        const notesValue = notesField?.value || '';
-        form.querySelectorAll('input[name="order_type"]').forEach((input) => { input.value = orderType; });
-        form.querySelectorAll('input[name="restaurant_table_id"]').forEach((input) => { input.value = tableValue; });
-        form.querySelectorAll('input[name="customer_id"]').forEach((input) => { input.value = customerValue; });
-        form.querySelectorAll('input[name="covers"]').forEach((input) => { input.value = coversField?.value || '1'; });
-        form.querySelectorAll('input[name="notes"]').forEach((input) => { input.value = notesValue; });
-    };
+        const baseFields = [
+            ['cart_json', cartJson],
+            ['order_type', state.orderType],
+            ['restaurant_table_id', tableSelect?.value || ''],
+            ['customer_id', customerSelect?.value || ''],
+            ['covers', '1'],
+            ['notes', notesInput?.value || ''],
+        ];
 
-    const submitSale = (method) => {
-        if (state.items.length === 0) return;
-        syncCommonFields(saleForm);
-        const { total } = totals();
-        let payments = [];
+        [holdForm, kitchenForm].forEach((form) => {
+            if (!form) return;
+            baseFields.forEach(([name, value]) => {
+                const input = form.querySelector(`input[name="${name}"]`);
+                if (input) input.value = value;
+            });
+            const orderIdInput = form.querySelector('input[name="order_id"]');
+            if (orderIdInput) orderIdInput.value = state.orderId;
+        });
 
-        if (method === 'credit') {
-            if (!customerField?.value) {
-                window.alert('Choose a customer before posting a credit sale.');
-                customerField?.focus();
-                return;
-            }
-        } else {
-            payments = [{ method, amount: Number(total.toFixed(2)), reference: null }];
+        if (saleForm) {
+            baseFields.forEach(([name, value]) => {
+                const input = saleForm.querySelector(`input[name="${name}"]`);
+                if (input) input.value = value;
+            });
+            saleForm.querySelector('input[name="order_id"]').value = state.orderId;
+            saleForm.querySelector('input[name="discount_type"]').value = state.discountType;
+            saleForm.querySelector('input[name="discount_value"]').value = String(state.discountValue || 0);
+            saleForm.querySelector('input[name="service_charge_rate"]').value = String(serviceRate);
+            saleForm.querySelector('input[name="payments_json"]').value = JSON.stringify([]);
+            saleForm.dataset.total = String(total.toFixed(2));
         }
-
-        saleForm.querySelector('input[name="payments_json"]').value = JSON.stringify(payments);
-        saleForm.submit();
     };
 
-    const submitOrderForm = (form) => {
-        if (state.items.length === 0) return;
-        syncCommonFields(form);
-        form.submit();
-    };
-
-    const render = () => {
-        cartItems.innerHTML = '';
-
+    const renderCart = () => {
+        cartBox.innerHTML = '';
         if (state.items.length === 0) {
-            cartItems.innerHTML = emptyState();
+            cartBox.innerHTML = `
+                <div class="empty-cart">
+                    <i class="ti ti-basket" aria-hidden="true"></i>
+                    <p>No items yet</p>
+                </div>
+            `;
         }
 
         state.items.forEach((item) => {
+            const station = stationFor(item);
             const row = document.createElement('div');
-            row.className = 'cart-item';
+            row.className = 'ci';
             row.innerHTML = `
-                <span class="ci-name">${item.name}</span>
-                <div class="ci-qty">
-                    <button class="ci-btn" type="button" data-delta="-1">−</button>
-                    <span class="ci-count">${item.qty}</span>
-                    <button class="ci-btn" type="button" data-delta="1">+</button>
+                <div class="ci-row1">
+                    <div class="ci-name">${item.name}</div>
+                    <div class="ci-qty-wrap">
+                        <button class="ci-btn" type="button" data-delta="-1">−</button>
+                        <span class="ci-n">${item.qty}</span>
+                        <button class="ci-btn" type="button" data-delta="1">+</button>
+                    </div>
+                    <div class="ci-price">${money(item.qty * item.price)}</div>
+                    <button class="ci-void-btn" type="button" title="Void item"><i class="ti ti-ban"></i></button>
                 </div>
-                <span class="ci-price">${money(item.qty * item.price)}</span>
+                <div class="ci-row2">
+                    <span class="ci-station ${station.className}">${station.label}</span>
+                    <button class="ci-note-btn" type="button">${item.note ? item.note : 'Add item note'}</button>
+                    <span class="ci-kds-dot ${kdsClass(item.kdsStatus)}"></span>
+                </div>
             `;
             row.querySelectorAll('[data-delta]').forEach((button) => {
                 button.addEventListener('click', () => {
@@ -124,44 +214,142 @@ document.addEventListener('DOMContentLoaded', () => {
                     render();
                 });
             });
-            cartItems.appendChild(row);
+            row.querySelector('.ci-note-btn').addEventListener('click', () => {
+                state.noteItemId = item.id;
+                root.querySelector('#noteLbl').textContent = `Note for ${item.name}`;
+                root.querySelector('#noteText').value = item.note || '';
+                openModal('mNote');
+            });
+            row.querySelector('.ci-void-btn').addEventListener('click', () => {
+                state.voidItemId = item.id;
+                root.querySelector('#voidItemLabel').textContent = item.name;
+                root.querySelector('#voidReason').value = '';
+                root.querySelector('#voidPin').value = '';
+                openModal('mVoid');
+            });
+            cartBox.appendChild(row);
         });
+    };
 
-        const { subtotal, vat, total } = totals();
-        subtotalNode.textContent = money(subtotal);
-        vatNode.textContent = money(vat);
-        totalNode.textContent = money(total);
-
-        const itemCount = state.items.reduce((sum, item) => sum + item.qty, 0);
-        cartCount.textContent = `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`;
+    const renderTotals = () => {
+        const current = totals();
+        subtotalNode.textContent = money(current.subtotal);
+        discountNode.textContent = `- ${money(current.discount)}`;
+        discountRow.hidden = current.discount <= 0;
+        serviceNode.textContent = money(current.service);
+        taxNode.textContent = money(current.tax);
+        totalNode.textContent = money(current.total);
+        draftTotal.textContent = money(current.total);
+        if (cartCountNode) {
+            cartCountNode.textContent = `${state.items.reduce((sum, item) => sum + item.qty, 0)} items`;
+        }
         if (cartBadge) {
-            cartBadge.dataset.count = String(itemCount);
-            cartBadge.textContent = itemCount > 0 ? String(itemCount) : '';
+            const count = String(state.items.reduce((sum, item) => sum + item.qty, 0));
+            cartBadge.dataset.count = count;
+            cartBadge.textContent = count === '0' ? '' : count;
         }
     };
 
-    const matchesFilter = (product) => {
-        const categoryMatch = state.category === 'all' || product.category === state.category;
-        if (!categoryMatch) return false;
-        if (!state.search) return true;
+    const renderOrderMeta = () => {
+        orderNumberNode.textContent = state.orderNumber;
+        orderButtonLabel.textContent = orderButtonText();
+        updateBadges();
+        setActiveOrderTypeButton();
+    };
 
-        const haystack = [product.name, product.category, product.subcategory, product.sku, product.barcode]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase();
-
-        return haystack.includes(state.search);
+    const render = () => {
+        renderCart();
+        renderTotals();
+        renderOrderMeta();
+        syncForms();
     };
 
     const filterProducts = () => {
-        productCards.forEach((card) => {
-            const product = parseProduct(card);
-            card.hidden = !matchesFilter(product);
+        productButtons.forEach((button) => {
+            const product = parseJson(button.dataset.posProduct);
+            const categoryMatch = state.category === 'all' || product.category === state.category;
+            const searchMatch = !state.search || [product.name, product.category, product.subcategory, product.sku, product.barcode]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase()
+                .includes(state.search);
+            button.hidden = !(categoryMatch && searchMatch);
         });
         categoryButtons.forEach((button) => {
             button.classList.toggle('active', button.dataset.posCategory === state.category);
         });
     };
+
+    const openModal = (id) => {
+        root.querySelector(`#${id}`)?.classList.add('show');
+    };
+
+    const closeModal = (id) => {
+        root.querySelector(`#${id}`)?.classList.remove('show');
+    };
+
+    const resetDraft = () => {
+        state.items = [];
+        state.orderId = '';
+        state.orderNumber = 'ORD-DRAFT';
+        state.orderType = 'dine_in';
+        state.status = 'open';
+        state.held = false;
+        state.discountType = 'fixed';
+        state.discountValue = 0;
+        state.noteItemId = null;
+        state.voidItemId = null;
+        if (tableSelect) tableSelect.value = '';
+        if (customerSelect) customerSelect.value = '';
+        if (waiterSelect) waiterSelect.value = waiterName;
+        if (notesInput) notesInput.value = '';
+        setActiveBillButton(draftBillButton);
+        render();
+    };
+
+    const submitSale = (method, splitLines = null) => {
+        if (state.items.length === 0) return;
+        if (method === 'credit' && !customerSelect?.value) {
+            window.alert('Choose a customer before posting a credit sale.');
+            customerSelect?.focus();
+            return;
+        }
+        syncForms();
+        const current = totals();
+        const payments = splitLines || (method === 'credit' ? [] : [{ method, amount: Number(current.total.toFixed(2)), reference: null }]);
+        saleForm.querySelector('input[name="payments_json"]').value = JSON.stringify(payments);
+        saleForm.submit();
+    };
+
+    const printOrderTicket = () => {
+        const stationLabel = orderButtonText().replace('Print ', '');
+        const lines = state.items.map((item) => `<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${item.qty} × ${item.name}${item.note ? `<br><small>${item.note}</small>` : ''}</span><strong>${stationFor(item).label}</strong></div>`).join('');
+        const win = window.open('', '_blank', 'width=420,height=640');
+        if (!win) return;
+        win.document.write(`
+            <html><head><title>${stationLabel}</title></head>
+            <body style="font-family:Arial,sans-serif;padding:18px">
+                <h2 style="margin:0 0 6px">COARSE POS</h2>
+                <div style="font-size:12px;color:#555;margin-bottom:14px">${stationLabel}<br>${state.orderNumber}</div>
+                ${lines}
+                <hr>
+                <div style="font-size:12px">Waiter: ${waiterSelect?.value || waiterName}</div>
+                <div style="font-size:12px">Guest: ${customerSelect?.selectedOptions?.[0]?.textContent || 'Walk-in customer'}</div>
+                <div style="font-size:12px">Table: ${tableSelect?.selectedOptions?.[0]?.textContent || 'No table'}</div>
+            </body></html>
+        `);
+        win.document.close();
+        win.focus();
+        win.print();
+        setTimeout(() => win.close(), 250);
+    };
+
+    orderTypeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            state.orderType = button.dataset.orderTypeBtn;
+            render();
+        });
+    });
 
     categoryButtons.forEach((button) => {
         button.addEventListener('click', () => {
@@ -175,14 +363,23 @@ document.addEventListener('DOMContentLoaded', () => {
         filterProducts();
     });
 
-    productCards.forEach((button) => {
+    productButtons.forEach((button) => {
         button.addEventListener('click', () => {
-            const product = parseProduct(button);
-            const line = state.items.find((item) => item.id === product.id);
-            if (line) {
-                line.qty += 1;
+            const product = parseJson(button.dataset.posProduct);
+            const found = state.items.find((item) => item.id === product.id);
+            if (found) {
+                found.qty += 1;
             } else {
-                state.items.push({ id: product.id, name: product.name, price: Number(product.price || 0), qty: 1, notes: '' });
+                state.items.push({
+                    id: product.id,
+                    name: product.name,
+                    price: Number(product.price || 0),
+                    qty: 1,
+                    category: product.category,
+                    subcategory: product.subcategory,
+                    note: '',
+                    kdsStatus: state.status === 'pending' ? 'cooking' : 'pending',
+                });
             }
             render();
         });
@@ -194,13 +391,173 @@ document.addEventListener('DOMContentLoaded', () => {
 
     root.querySelectorAll('[data-submit-order]').forEach((button) => {
         button.addEventListener('click', () => {
-            if (button.dataset.submitOrder === 'hold') submitOrderForm(holdForm);
-            if (button.dataset.submitOrder === 'kitchen') submitOrderForm(kitchenForm);
+            if (state.items.length === 0) return;
+            if (button.dataset.submitOrder === 'hold') {
+                state.held = true;
+                state.status = 'open';
+                syncForms();
+                holdForm.submit();
+                return;
+            }
+            if (button.dataset.submitOrder === 'kitchen') {
+                state.status = 'pending';
+                state.held = false;
+                state.items.forEach((item) => { item.kdsStatus = 'cooking'; });
+                printOrderTicket();
+                syncForms();
+                kitchenForm.submit();
+            }
         });
+    });
+
+    const loadOrderPayload = (button) => {
+        const payload = parseJson(button.dataset.openOrder);
+        state.orderId = String(payload.id || '');
+        state.orderNumber = payload.order_number || 'ORD-DRAFT';
+        state.orderType = payload.order_type || 'dine_in';
+        state.status = payload.status === 'sent' ? 'pending' : 'open';
+        state.held = payload.status === 'held';
+        state.discountType = 'fixed';
+        state.discountValue = 0;
+        state.items = (payload.items || []).map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: Number(item.price || 0),
+            qty: Number(item.qty || 0),
+            note: item.notes || '',
+            category: item.category,
+            subcategory: item.subcategory,
+            kdsStatus: payload.status === 'sent' ? 'cooking' : 'pending',
+        }));
+        if (tableSelect) tableSelect.value = payload.restaurant_table_id || '';
+        if (customerSelect) customerSelect.value = payload.customer_id || '';
+        if (notesInput) notesInput.value = payload.notes || '';
+        setActiveBillButton(button);
+        render();
+    };
+
+    openBillButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            loadOrderPayload(button);
+        });
+    });
+
+    draftBillButton?.addEventListener('click', () => {
+        resetDraft();
+    });
+    root.querySelector('[data-new-bill]')?.addEventListener('click', () => {
+        resetDraft();
+    });
+
+    root.querySelectorAll('[data-close-modal]').forEach((button) => {
+        button.addEventListener('click', () => closeModal(button.dataset.closeModal));
+    });
+    modalIds.forEach((id) => {
+        root.querySelector(`#${id}`)?.addEventListener('click', (event) => {
+            if (event.target.id === id) closeModal(id);
+        });
+    });
+
+    root.querySelectorAll('[data-note-chip]').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const noteText = root.querySelector('#noteText');
+            noteText.value = noteText.value ? `${noteText.value}, ${chip.dataset.noteChip}` : chip.dataset.noteChip;
+        });
+    });
+
+    root.querySelector('[data-save-note]')?.addEventListener('click', () => {
+        const item = state.items.find((line) => String(line.id) === String(state.noteItemId));
+        if (item) item.note = root.querySelector('#noteText').value.trim();
+        closeModal('mNote');
+        render();
+    });
+
+    root.querySelector('[data-confirm-void]')?.addEventListener('click', () => {
+        const reason = root.querySelector('#voidReason').value;
+        const pin = root.querySelector('#voidPin').value;
+        if (!reason || pin !== '1234') {
+            window.alert('Select a reason and enter the manager PIN.');
+            return;
+        }
+        state.items = state.items.filter((line) => String(line.id) !== String(state.voidItemId));
+        closeModal('mVoid');
+        render();
+    });
+
+    root.querySelector('[data-open-discount]')?.addEventListener('click', () => {
+        root.querySelector('#discPct').value = '';
+        root.querySelector('#discFixed').value = '';
+        root.querySelector('#discPin').value = '';
+        openModal('mDisc');
+    });
+
+    root.querySelector('[data-apply-discount]')?.addEventListener('click', () => {
+        const pct = Number(root.querySelector('#discPct').value || 0);
+        const fixed = Number(root.querySelector('#discFixed').value || 0);
+        if (pct > 10 && root.querySelector('#discPin').value !== '1234') {
+            window.alert('Manager PIN required for discounts above 10%.');
+            return;
+        }
+        if (pct > 0) {
+            state.discountType = 'percent';
+            state.discountValue = pct;
+        } else {
+            state.discountType = 'fixed';
+            state.discountValue = fixed;
+        }
+        closeModal('mDisc');
+        render();
+    });
+
+    const updateSplitPreview = () => {
+        const total = totals().total;
+        root.querySelector('#splitBillTotal').textContent = money(total);
+        root.querySelector('#splitN').textContent = String(state.splitWays);
+        root.querySelector('#splitPer').textContent = money(Math.ceil(total / state.splitWays));
+    };
+
+    root.querySelector('[data-open-split]')?.addEventListener('click', () => {
+        if (state.items.length === 0) return;
+        state.splitWays = 2;
+        updateSplitPreview();
+        openModal('mSplit');
+    });
+
+    root.querySelectorAll('[data-split-change]').forEach((button) => {
+        button.addEventListener('click', () => {
+            state.splitWays = Math.max(2, state.splitWays + Number(button.dataset.splitChange));
+            updateSplitPreview();
+        });
+    });
+
+    root.querySelector('[data-confirm-split]')?.addEventListener('click', () => {
+        const total = totals().total;
+        const each = Number((total / state.splitWays).toFixed(2));
+        const payments = Array.from({ length: state.splitWays }, (_value, index) => ({
+            method: 'cash',
+            amount: index === state.splitWays - 1
+                ? Number((total - (each * (state.splitWays - 1))).toFixed(2))
+                : each,
+            reference: null,
+        }));
+        closeModal('mSplit');
+        submitSale('split', payments);
+    });
+
+    [tableSelect, customerSelect, waiterSelect, notesInput].forEach((field) => {
+        field?.addEventListener('change', syncForms);
+        field?.addEventListener('input', syncForms);
     });
 
     filterProducts();
     render();
+    if (selectedOrderId) {
+        const selectedButton = openBillButtons.find((button) => {
+            const payload = parseJson(button.dataset.openOrder);
+            return String(payload.id || '') === selectedOrderId;
+        });
+        if (selectedButton) loadOrderPayload(selectedButton);
+    }
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -227,7 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const searchOk = !query || (row.dataset.search || '').includes(query);
             const show = typeOk && categoryOk && searchOk;
             row.hidden = !show;
-            if (show) visible++;
+            if (show) visible += 1;
         });
 
         if (count) count.textContent = visible + (visible === 1 ? ' item' : ' items');
