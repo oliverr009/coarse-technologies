@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', () => {
         held: false,
         discountType: 'fixed',
         discountValue: 0,
+        discountReason: '',
+        managerPin: '',
+        voidEvents: [],
         splitWays: 2,
         noteItemId: null,
         voidItemId: null,
@@ -171,6 +174,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ['restaurant_table_id', tableSelect?.value || ''],
             ['customer_id', customerSelect?.value || ''],
             ['covers', '1'],
+            ['manager_pin', state.managerPin || ''],
+            ['void_events_json', JSON.stringify(state.voidEvents || [])],
             ['notes', notesInput?.value || ''],
         ];
 
@@ -192,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
             saleForm.querySelector('input[name="order_id"]').value = state.orderId;
             saleForm.querySelector('input[name="discount_type"]').value = state.discountType;
             saleForm.querySelector('input[name="discount_value"]').value = String(state.discountValue || 0);
+            saleForm.querySelector('input[name="discount_reason"]').value = state.discountReason || '';
             saleForm.querySelector('input[name="service_charge_rate"]').value = String(serviceRate);
             saleForm.querySelector('input[name="payments_json"]').value = JSON.stringify([]);
             saleForm.dataset.total = String(total.toFixed(2));
@@ -329,6 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
         state.held = false;
         state.discountType = 'fixed';
         state.discountValue = 0;
+        state.discountReason = '';
+        state.managerPin = '';
+        state.voidEvents = [];
         state.noteItemId = null;
         state.voidItemId = null;
         if (tableSelect) tableSelect.value = '';
@@ -458,6 +467,9 @@ document.addEventListener('DOMContentLoaded', () => {
         state.held = payload.status === 'held';
         state.discountType = 'fixed';
         state.discountValue = 0;
+        state.discountReason = '';
+        state.managerPin = '';
+        state.voidEvents = [];
         state.items = (payload.items || []).map((item) => ({
             id: item.id,
             name: item.name,
@@ -514,10 +526,18 @@ document.addEventListener('DOMContentLoaded', () => {
     root.querySelector('[data-confirm-void]')?.addEventListener('click', () => {
         const reason = root.querySelector('#voidReason').value;
         const pin = root.querySelector('#voidPin').value;
-        if (!reason || pin !== '1234') {
-            window.alert('Select a reason and enter the manager PIN.');
+        const item = state.items.find((line) => String(line.id) === String(state.voidItemId));
+        if (!reason || !pin || !item) {
+            window.alert('Select a reason and enter the manager PIN or manager password.');
             return;
         }
+        state.managerPin = pin;
+        state.voidEvents.push({
+            item_id: item.id,
+            item_name: item.name,
+            qty: item.qty,
+            reason,
+        });
         state.items = state.items.filter((line) => String(line.id) !== String(state.voidItemId));
         closeModal('mVoid');
         render();
@@ -527,14 +547,18 @@ document.addEventListener('DOMContentLoaded', () => {
         root.querySelector('#discPct').value = '';
         root.querySelector('#discFixed').value = '';
         root.querySelector('#discPin').value = '';
+        root.querySelector('#discReason').value = state.discountReason || 'Loyalty discount';
         openModal('mDisc');
     });
 
     root.querySelector('[data-apply-discount]')?.addEventListener('click', () => {
         const pct = Number(root.querySelector('#discPct').value || 0);
         const fixed = Number(root.querySelector('#discFixed').value || 0);
-        if (pct > 10 && root.querySelector('#discPin').value !== '1234') {
-            window.alert('Manager PIN required for discounts above 10%.');
+        const discountValue = pct > 0 ? pct : fixed;
+        const reason = root.querySelector('#discReason').value;
+        const pin = root.querySelector('#discPin').value;
+        if (discountValue > 0 && (!reason || !pin)) {
+            window.alert('Discounts require a reason and manager PIN or manager password.');
             return;
         }
         if (pct > 0) {
@@ -544,6 +568,8 @@ document.addEventListener('DOMContentLoaded', () => {
             state.discountType = 'fixed';
             state.discountValue = fixed;
         }
+        state.discountReason = discountValue > 0 ? reason : '';
+        if (discountValue > 0) state.managerPin = pin;
         closeModal('mDisc');
         render();
     });

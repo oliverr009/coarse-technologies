@@ -53,6 +53,11 @@ class Sale extends Model
         return $this->hasMany(SalePayment::class);
     }
 
+    public function adjustments(): HasMany
+    {
+        return $this->hasMany(SaleAdjustment::class);
+    }
+
     public function table(): BelongsTo
     {
         return $this->belongsTo(RestaurantTable::class, 'restaurant_table_id');

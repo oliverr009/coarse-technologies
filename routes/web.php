@@ -19,6 +19,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/pos/hold', [PosController::class, 'holdOrder'])->name('pos.hold');
     Route::post('/pos/kitchen', [PosController::class, 'sendToKitchen'])->name('pos.kitchen');
     Route::get('/pos/receipts/{sale}', [PosController::class, 'receipt'])->name('pos.receipt');
+    Route::post('/pos/receipts/{sale}/void', [PosController::class, 'voidSale'])->name('pos.void-sale');
+    Route::post('/pos/receipts/{sale}/refund', [PosController::class, 'refundSale'])->name('pos.refund-sale');
 
     Route::get('/inventory', [ModuleController::class, 'inventory'])->name('inventory');
     Route::get('/tables', [ModuleController::class, 'tables'])->name('tables');

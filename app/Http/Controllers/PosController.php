@@ -9,6 +9,7 @@ use App\Models\RestaurantTable;
 use App\Models\Sale;
 use App\Models\Setting;
 use App\Services\PosService;
+use App\Services\SaleAdjustmentService;
 use Illuminate\Http\Request;
 
 class PosController extends Controller
@@ -96,7 +97,10 @@ class PosController extends Controller
             'customer_id' => ['nullable', 'exists:customers,id'],
             'discount_type' => ['required', 'in:fixed,percent'],
             'discount_value' => ['nullable', 'numeric', 'min:0'],
+            'discount_reason' => ['nullable', 'string', 'max:255'],
             'service_charge_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'manager_pin' => ['nullable', 'string', 'max:120'],
+            'void_events_json' => ['nullable', 'json'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -105,9 +109,10 @@ class PosController extends Controller
             ->values()
             ->all();
         $payments = json_decode($data['payments_json'] ?? '[]', true) ?: [];
+        $voidEvents = json_decode($data['void_events_json'] ?? '[]', true) ?: [];
 
         try {
-            $sale = $pos->postSale($cart, $data + ['payments' => $payments], $request->user()->id);
+            $sale = $pos->postSale($cart, $data + ['payments' => $payments, 'void_events' => $voidEvents], $request->user()->id);
         } catch (\Throwable $e) {
             return back()->withErrors(['pos' => $e->getMessage()])->withInput();
         }
@@ -124,6 +129,8 @@ class PosController extends Controller
             'restaurant_table_id' => ['nullable', 'exists:restaurant_tables,id'],
             'customer_id' => ['nullable', 'exists:customers,id'],
             'covers' => ['nullable', 'integer', 'min:1', 'max:99'],
+            'manager_pin' => ['nullable', 'string', 'max:120'],
+            'void_events_json' => ['nullable', 'json'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -131,9 +138,10 @@ class PosController extends Controller
             ->filter(fn ($line) => ((float) ($line['qty'] ?? 0)) > 0)
             ->values()
             ->all();
+        $voidEvents = json_decode($data['void_events_json'] ?? '[]', true) ?: [];
 
         try {
-            $order = $pos->sendToKitchen($cart, $data, $request->user()->id);
+            $order = $pos->sendToKitchen($cart, $data + ['void_events' => $voidEvents], $request->user()->id);
         } catch (\Throwable $e) {
             return back()->withErrors(['pos' => $e->getMessage()])->withInput();
         }
@@ -150,6 +158,8 @@ class PosController extends Controller
             'restaurant_table_id' => ['nullable', 'exists:restaurant_tables,id'],
             'customer_id' => ['nullable', 'exists:customers,id'],
             'covers' => ['nullable', 'integer', 'min:1', 'max:99'],
+            'manager_pin' => ['nullable', 'string', 'max:120'],
+            'void_events_json' => ['nullable', 'json'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -157,9 +167,10 @@ class PosController extends Controller
             ->filter(fn ($line) => ((float) ($line['qty'] ?? 0)) > 0)
             ->values()
             ->all();
+        $voidEvents = json_decode($data['void_events_json'] ?? '[]', true) ?: [];
 
         try {
-            $order = $pos->holdOrder($cart, $data, $request->user()->id);
+            $order = $pos->holdOrder($cart, $data + ['void_events' => $voidEvents], $request->user()->id);
         } catch (\Throwable $e) {
             return back()->withErrors(['pos' => $e->getMessage()])->withInput();
         }
@@ -170,7 +181,43 @@ class PosController extends Controller
     public function receipt(Sale $sale)
     {
         return view('pos.receipt', [
-            'sale' => $sale->load(['items', 'payments', 'table', 'customer', 'cashier']),
+            'sale' => $sale->load(['items', 'payments', 'table', 'customer', 'cashier', 'adjustments.actor', 'adjustments.approver']),
         ]);
+    }
+
+    public function voidSale(Request $request, Sale $sale, SaleAdjustmentService $adjustments)
+    {
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'manager_pin' => ['required', 'string', 'max:120'],
+        ]);
+
+        try {
+            $adjustments->voidSale($sale, $data, $request->user()->id);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['receipt' => $e->getMessage()]);
+        }
+
+        return redirect()->route('pos.receipt', $sale)->with('status', "Sale voided: {$sale->sale_number}");
+    }
+
+    public function refundSale(Request $request, Sale $sale, SaleAdjustmentService $adjustments)
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'reason' => ['required', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'refund_method' => ['nullable', 'in:cash,mpesa,card,credit_adjustment,bank'],
+            'manager_pin' => ['required', 'string', 'max:120'],
+        ]);
+
+        try {
+            $adjustments->refundSale($sale, $data, $request->user()->id);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['receipt' => $e->getMessage()]);
+        }
+
+        return redirect()->route('pos.receipt', $sale)->with('status', "Refund recorded: {$sale->sale_number}");
     }
 }

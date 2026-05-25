@@ -8,10 +8,12 @@ use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\OrderItem;
 use App\Models\Order;
+use App\Models\PosAuditLog;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Recipe;
 use App\Models\RestaurantTable;
+use App\Models\SaleAdjustment;
 use App\Models\Setting;
 use App\Models\StockMovement;
 use App\Models\Supplier;
@@ -109,6 +111,8 @@ class ModuleController extends Controller
                 ->orderByDesc('qty')
                 ->get(),
             'expenses' => Expense::query()->sum('amount'),
+            'auditLogs' => PosAuditLog::query()->with(['actor', 'approver', 'order', 'sale'])->latest()->limit(20)->get(),
+            'saleAdjustments' => SaleAdjustment::query()->with(['sale', 'actor', 'approver'])->latest()->limit(20)->get(),
         ]);
     }
 

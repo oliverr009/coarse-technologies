@@ -221,9 +221,20 @@ class ActionController extends Controller
 
     public function settings(Request $request)
     {
-        foreach (['allow_negative_inventory', 'tax_rate', 'currency', 'business_name', 'kra_pin'] as $key) {
-            Setting::query()->updateOrCreate(['key' => $key], ['value' => $key === 'allow_negative_inventory' ? $request->boolean($key) : $request->input($key)]);
+        foreach (['allow_negative_inventory', 'tax_rate', 'currency', 'business_name', 'kra_pin', 'discount_approval_threshold'] as $key) {
+            Setting::query()->updateOrCreate(
+                ['key' => $key],
+                ['value' => $key === 'allow_negative_inventory' ? $request->boolean($key) : $request->input($key)]
+            );
         }
+
+        if ($request->filled('manager_override_pin')) {
+            Setting::query()->updateOrCreate(
+                ['key' => 'manager_override_pin'],
+                ['value' => Hash::make((string) $request->input('manager_override_pin'))]
+            );
+        }
+
         return back()->with('status', 'Settings saved.');
     }
 }

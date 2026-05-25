@@ -12,8 +12,10 @@ use Illuminate\Support\Facades\DB;
 
 class PosService
 {
-    public function __construct(private readonly RecipeService $recipes)
-    {
+    public function __construct(
+        private readonly RecipeService $recipes,
+        private readonly PosApprovalService $approvals,
+    ) {
     }
 
     public function postSale(array $cart, array $options, int $userId): Sale
@@ -31,6 +33,7 @@ class PosService
             $discountValue = max(0, (float) ($options['discount_value'] ?? 0));
             $serviceChargeRate = max(0, (float) ($options['service_charge_rate'] ?? 0));
             $payments = $this->cleanPayments($options['payments'] ?? []);
+            $voidEvents = collect($options['void_events'] ?? [])->values()->all();
 
             $lines = collect($cart)->map(function ($line) {
                 $product = Product::query()->findOrFail((int) $line['id']);
@@ -58,6 +61,15 @@ class PosService
             if ($balance > 0 && $paymentMethod !== 'credit') {
                 throw new \RuntimeException('Payment is less than bill total. Use credit or add another payment line.');
             }
+
+            $approval = $this->approvals->authorizeCartChanges([
+                'subtotal' => $subtotal,
+                'discount_type' => $discountType,
+                'discount_value' => $discountValue,
+                'discount_reason' => $options['discount_reason'] ?? null,
+                'manager_pin' => $options['manager_pin'] ?? null,
+                'void_events' => $voidEvents,
+            ], $userId);
 
             $sale = Sale::query()->create([
                 'sale_number' => Numbers::next('SAL', 'sales', 'sale_number'),
@@ -119,6 +131,21 @@ class PosService
                 Order::query()->whereKey($orderId)->update(['status' => 'paid']);
             }
 
+            $this->approvals->logCartControls(
+                $approval,
+                $userId,
+                [
+                    'sale_id' => $sale->id,
+                    'order_id' => $orderId,
+                    'order_number' => $sale->sale_number,
+                    'discount_amount' => $discount,
+                    'discount_type' => $discountType,
+                    'discount_value' => $discountValue,
+                    'discount_reason' => $options['discount_reason'] ?? null,
+                    'void_events' => $voidEvents,
+                ]
+            );
+
             return $sale->load(['items', 'payments', 'table', 'customer']);
         });
     }
@@ -143,6 +170,7 @@ class PosService
             $tableId = $options['restaurant_table_id'] ?? null;
             $orderType = $options['order_type'] ?? ($tableId ? 'dine_in' : 'takeaway');
             $existingOrderId = $options['order_id'] ?? null;
+            $voidEvents = collect($options['void_events'] ?? [])->values()->all();
 
             $order = $existingOrderId
                 ? Order::query()->with('items')->findOrFail((int) $existingOrderId)
@@ -151,6 +179,15 @@ class PosService
             if (!$order->exists) {
                 $order->order_number = Numbers::next('ORD', 'orders', 'order_number');
             }
+
+            $approval = $this->approvals->authorizeCartChanges([
+                'subtotal' => (float) $order->subtotal,
+                'discount_type' => 'fixed',
+                'discount_value' => 0,
+                'discount_reason' => null,
+                'manager_pin' => $options['manager_pin'] ?? null,
+                'void_events' => $voidEvents,
+            ], $userId);
 
             $order->fill([
                 'order_type' => $orderType,
@@ -194,6 +231,17 @@ class PosService
             if ($tableId) {
                 RestaurantTable::query()->whereKey($tableId)->update(['status' => 'occupied']);
             }
+
+            $this->approvals->logCartControls(
+                $approval,
+                $userId,
+                [
+                    'order_id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'void_events' => $voidEvents,
+                    'status' => $status,
+                ]
+            );
 
             return $order->load(['items', 'table', 'customer']);
         });

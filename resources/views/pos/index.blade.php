@@ -224,7 +224,10 @@
                 <input type="hidden" name="customer_id">
                 <input type="hidden" name="discount_type" value="fixed">
                 <input type="hidden" name="discount_value" value="0">
+                <input type="hidden" name="discount_reason" value="">
                 <input type="hidden" name="service_charge_rate" value="10">
+                <input type="hidden" name="manager_pin" value="">
+                <input type="hidden" name="void_events_json" value="[]">
                 <input type="hidden" name="notes">
             </form>
 
@@ -236,6 +239,8 @@
                 <input type="hidden" name="restaurant_table_id">
                 <input type="hidden" name="customer_id">
                 <input type="hidden" name="covers" value="1">
+                <input type="hidden" name="manager_pin" value="">
+                <input type="hidden" name="void_events_json" value="[]">
                 <input type="hidden" name="notes">
             </form>
 
@@ -247,6 +252,8 @@
                 <input type="hidden" name="restaurant_table_id">
                 <input type="hidden" name="customer_id">
                 <input type="hidden" name="covers" value="1">
+                <input type="hidden" name="manager_pin" value="">
+                <input type="hidden" name="void_events_json" value="[]">
                 <input type="hidden" name="notes">
             </form>
         </div>
