@@ -4,7 +4,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const applyTheme = (theme) => {
         document.documentElement.dataset.theme = theme;
+        document.body?.setAttribute('data-theme', theme);
         localStorage.setItem('coarse-theme', theme);
+        localStorage.setItem('pos-theme', theme);
         if (metaTheme) metaTheme.setAttribute('content', theme === 'light' ? '#f5f8fc' : '#0e1230');
         if (toggle) {
             toggle.setAttribute('aria-label', theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
@@ -14,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    applyTheme(localStorage.getItem('coarse-theme') || document.documentElement.dataset.theme || 'dark');
+    applyTheme(localStorage.getItem('pos-theme') || localStorage.getItem('coarse-theme') || document.documentElement.dataset.theme || 'light');
 
     toggle?.addEventListener('click', () => {
         applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
@@ -72,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const discountRow = root.querySelector('[data-discount-row]');
     const serviceNode = root.querySelector('[data-service]');
     const taxNode = root.querySelector('[data-tax]');
-    const totalNode = root.querySelector('[data-total]');
+    const totalNodes = [...root.querySelectorAll('[data-total]')];
     const orderNumberNode = root.querySelector('[data-order-number]');
     const billModeNode = root.querySelector('[data-bill-mode]');
     const billStatusNode = root.querySelector('[data-bill-status]');
@@ -300,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
         discountRow.hidden = current.discount <= 0;
         serviceNode.textContent = money(current.service);
         taxNode.textContent = money(current.tax);
-        totalNode.textContent = money(current.total);
+        totalNodes.forEach((node) => { node.textContent = money(current.total); });
         draftTotal.textContent = money(current.total);
         if (cartCountNode) {
             cartCountNode.textContent = `${state.items.reduce((sum, item) => sum + item.qty, 0)} items`;
@@ -475,7 +477,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     root.querySelectorAll('[data-pay-method]').forEach((button) => {
-        button.addEventListener('click', () => submitSale(button.dataset.payMethod));
+        button.addEventListener('click', () => {
+            closeModal('mPayChooser');
+            submitSale(button.dataset.payMethod);
+        });
+    });
+
+    root.querySelector('[data-open-pay]')?.addEventListener('click', () => {
+        if (state.items.length === 0) {
+            toast('Add an item before payment', 'gold');
+            return;
+        }
+        renderTotals();
+        openModal('mPayChooser');
     });
 
     root.querySelectorAll('[data-submit-order]').forEach((button) => {

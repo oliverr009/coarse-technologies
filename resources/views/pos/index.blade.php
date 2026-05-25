@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'POS - Sales Terminal'])
+@extends('layouts.pos-terminal', ['title' => 'POS - Sales Terminal'])
 
 @php
     $categories = $products->pluck('category.name')->filter()->unique()->values();
@@ -44,7 +44,21 @@
 
 @section('content')
 @include('pos.partials.sell-screen-v3-styles')
-<div class="sell-screen-v3" data-pos-root data-tax-rate="{{ $taxRate }}" data-default-service-rate="10" data-cashier="{{ auth()->user()->name ?? 'Cashier' }}" data-selected-order="{{ $selectedOrderId }}">
+<div data-pos-root data-tax-rate="{{ $taxRate }}" data-default-service-rate="10" data-cashier="{{ auth()->user()->name ?? 'Cashier' }}" data-selected-order="{{ $selectedOrderId }}" style="display:contents">
+    <nav>
+        <div>
+            <div class="nav-title">POS — Sales Terminal</div>
+            <div class="nav-sub">Main Branch</div>
+        </div>
+        <div class="nav-spacer"></div>
+        <div class="nav-pill"><i class="ti ti-tools-kitchen-2" style="font-size:12px" aria-hidden="true"></i> Restaurant</div>
+        <button class="nav-icon" type="button" data-theme-toggle title="Toggle theme" aria-label="Toggle theme"><i class="ti ti-moon" aria-hidden="true"></i></button>
+        <a class="nav-icon" href="{{ route('dashboard') }}" title="Dashboard" aria-label="Dashboard"><i class="ti ti-layout-dashboard" aria-hidden="true"></i></a>
+        <a class="nav-icon" href="{{ route('orders') }}" title="Orders" aria-label="Orders"><i class="ti ti-receipt-2" aria-hidden="true"></i></a>
+        <a class="nav-icon" href="{{ route('tables') }}" title="Tables" aria-label="Tables"><i class="ti ti-layout-grid" aria-hidden="true"></i></a>
+        <div class="avatar">{{ strtoupper(substr(auth()->user()->name ?? 'C', 0, 1)) }}</div>
+    </nav>
+
     <div class="bills-bar">
         <button class="bill-tab active" type="button" data-draft-bill>
             <span class="bt-status bts-open"></span>
@@ -172,22 +186,23 @@
                 </div>
                 <div class="selects-row">
                     <select class="ord-sel" data-waiter-select>
-                        <option value="{{ auth()->user()->name ?? 'Cashier' }}">{{ auth()->user()->name ?? 'Cashier' }}</option>
+                        <option value="{{ auth()->user()->name ?? 'Cashier' }}">Waiter: {{ auth()->user()->name ?? 'Cashier' }}</option>
                     </select>
-                    <select class="ord-sel" data-customer-select>
+                    <button class="table-btn" type="button"><i class="ti ti-layout-grid" aria-hidden="true"></i> <span>No table</span></button>
+                    <select class="ord-sel" data-customer-select hidden>
                         <option value="">Walk-in customer</option>
                         @foreach($customers as $customer)
                             <option value="{{ $customer->id }}">{{ $customer->name }}</option>
                         @endforeach
                     </select>
-                    <select class="ord-sel" data-table-select>
+                    <select class="ord-sel" data-table-select hidden>
                         <option value="">No table</option>
                         @foreach($tables as $table)
                             <option value="{{ $table->id }}">{{ $table->name }} · {{ $table->status }}</option>
                         @endforeach
                     </select>
                 </div>
-                <textarea class="bill-note" rows="2" data-notes-input placeholder="Bill notes, allergies, service notes, delivery details"></textarea>
+                <textarea class="bill-note" rows="2" data-notes-input placeholder="Bill notes, allergies, service notes, delivery details" hidden></textarea>
             </div>
 
             <div class="cart" data-cart-items>
@@ -209,18 +224,13 @@
             </div>
 
             <div class="pay-area">
-                <div class="pay-grid">
-                    <button class="pay-btn pb-mpesa" type="button" data-pay-method="mpesa"><i class="ti ti-device-mobile" aria-hidden="true"></i> M-Pesa</button>
-                    <button class="pay-btn pb-cash" type="button" data-pay-method="cash"><i class="ti ti-cash" aria-hidden="true"></i> Cash</button>
-                    <button class="pay-btn pb-card" type="button" data-pay-method="card"><i class="ti ti-credit-card" aria-hidden="true"></i> Card</button>
-                    <button class="pay-btn pb-credit" type="button" data-pay-method="credit"><i class="ti ti-user-dollar" aria-hidden="true"></i> Credit</button>
-                </div>
+                <button class="pay-main-btn" type="button" data-open-pay><i class="ti ti-cash-register" style="font-size:18px" aria-hidden="true"></i> PAY</button>
                 <div class="action-row">
-                    <button class="act-btn disc-btn" type="button" data-open-discount><i class="ti ti-discount" aria-hidden="true"></i> Discount</button>
                     <button class="act-btn hold-btn" type="button" data-submit-order="hold"><i class="ti ti-pause" aria-hidden="true"></i> Hold</button>
+                    <button class="act-btn disc-btn" type="button" data-open-discount><i class="ti ti-discount" aria-hidden="true"></i> Disc</button>
                     <button class="act-btn split-btn" type="button" data-open-split><i class="ti ti-scissors" aria-hidden="true"></i> Split</button>
                 </div>
-                <button class="kitchen-btn" type="button" data-submit-order="kitchen"><i class="ti ti-printer" aria-hidden="true"></i> <span data-order-button-label>Print Kitchen Order</span></button>
+                <button class="order-btn" type="button" data-submit-order="kitchen"><i class="ti ti-chef-hat" style="font-size:20px" aria-hidden="true"></i> <span data-order-button-label>ORDER</span></button>
             </div>
 
             <form method="post" action="{{ route('pos.sale') }}" data-sale-form hidden>
@@ -287,6 +297,22 @@
             <div class="modal-footer">
                 <button class="btn btn-g" type="button" data-close-modal="mVoid">Cancel</button>
                 <button class="btn btn-r" type="button" data-confirm-void><i class="ti ti-ban"></i> Void</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="mPayChooser">
+        <div class="modal" style="width:380px">
+            <div class="modal-head"><span class="modal-title" style="color:var(--green)"><i class="ti ti-cash-register"></i> Choose Payment</span><button class="modal-x" type="button" data-close-modal="mPayChooser">×</button></div>
+            <div style="background:var(--bg3);border-radius:10px;padding:14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:13px;color:var(--text2);font-weight:600">Bill Total</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:800;color:var(--blue)" data-total>KES 0</span>
+            </div>
+            <div class="pay-grid" style="margin-bottom:0">
+                <button class="pay-grid-btn pgb-mpesa" type="button" data-pay-method="mpesa"><i class="ti ti-device-mobile"></i> M-Pesa</button>
+                <button class="pay-grid-btn pgb-cash" type="button" data-pay-method="cash"><i class="ti ti-cash"></i> Cash</button>
+                <button class="pay-grid-btn pgb-card" type="button" data-pay-method="card"><i class="ti ti-credit-card"></i> Card</button>
+                <button class="pay-grid-btn pgb-credit" type="button" data-pay-method="credit"><i class="ti ti-user-dollar"></i> Credit</button>
             </div>
         </div>
     </div>
