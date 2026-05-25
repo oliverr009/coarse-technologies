@@ -14,6 +14,8 @@ use App\Models\Purchase;
 use App\Models\Reservation;
 use App\Models\RestaurantTable;
 use App\Models\Setting;
+use App\Models\Shift;
+use App\Models\ShiftCashEntry;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\WastageEntry;
@@ -429,8 +431,22 @@ class ActionController extends Controller
 
     public function user(Request $request)
     {
-        User::query()->create([...$request->validate(['name' => ['required'], 'email' => ['required', 'email', 'unique:users,email'], 'role' => ['required'], 'password' => ['required']]), 'password' => Hash::make($request->input('password')), 'is_active' => true]);
+        User::query()->create([...$request->validate(['name' => ['required'], 'email' => ['required', 'email', 'unique:users,email'], 'role' => ['required', 'in:admin,manager,cashier,waiter,kitchen,inventory'], 'password' => ['required']]), 'password' => Hash::make($request->input('password')), 'is_active' => true]);
         return back()->with('status', 'User saved.');
+    }
+
+    public function userStatus(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'exists:users,id'],
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        abort_if((int) $data['user_id'] === (int) $request->user()->id && ! $request->boolean('is_active'), 422, 'You cannot deactivate your own account.');
+
+        User::query()->whereKey($data['user_id'])->update(['is_active' => $request->boolean('is_active')]);
+
+        return back()->with('status', 'User status updated.');
     }
 
     public function settings(Request $request)
@@ -450,5 +466,96 @@ class ActionController extends Controller
         }
 
         return back()->with('status', 'Settings saved.');
+    }
+
+    public function openShift(Request $request)
+    {
+        $data = $request->validate([
+            'opening_float' => ['required', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'max:1000'],
+        ]);
+
+        $existing = Shift::query()
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'open')
+            ->exists();
+
+        if ($existing) {
+            return back()->withErrors(['shift' => 'This cashier already has an open shift.']);
+        }
+
+        Shift::query()->create([
+            'shift_number' => Numbers::next('SFT', 'shifts', 'shift_number'),
+            'user_id' => $request->user()->id,
+            'opened_by' => $request->user()->id,
+            'status' => 'open',
+            'opening_float' => (float) $data['opening_float'],
+            'expected_cash' => (float) $data['opening_float'],
+            'opened_at' => now(),
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        return back()->with('status', 'Shift opened.');
+    }
+
+    public function shiftCashEntry(Request $request)
+    {
+        $data = $request->validate([
+            'shift_id' => ['required', 'exists:shifts,id'],
+            'entry_type' => ['required', 'in:cash_in,cash_out,petty_cash,payout,float_topup'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'reason' => ['required', 'max:120'],
+            'notes' => ['nullable', 'max:1000'],
+        ]);
+
+        $shift = Shift::query()->whereKey($data['shift_id'])->where('status', 'open')->firstOrFail();
+        if ($request->user()->role === 'cashier' && (int) $shift->user_id !== (int) $request->user()->id) {
+            abort(403, 'You can only post entries to your own shift.');
+        }
+
+        ShiftCashEntry::query()->create([
+            'shift_id' => $shift->id,
+            'entry_type' => $data['entry_type'],
+            'amount' => (float) $data['amount'],
+            'reason' => $data['reason'],
+            'notes' => $data['notes'] ?? null,
+            'created_by' => $request->user()->id,
+        ]);
+
+        $sign = in_array($data['entry_type'], ['cash_out', 'petty_cash', 'payout'], true) ? -1 : 1;
+        $shift->update([
+            'expected_cash' => round((float) $shift->expected_cash + ($sign * (float) $data['amount']), 2),
+        ]);
+
+        return back()->with('status', 'Shift cash entry posted.');
+    }
+
+    public function closeShift(Request $request)
+    {
+        $data = $request->validate([
+            'shift_id' => ['required', 'exists:shifts,id'],
+            'counted_cash' => ['required', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'max:1000'],
+        ]);
+
+        $shift = Shift::query()->whereKey($data['shift_id'])->where('status', 'open')->firstOrFail();
+        if ($request->user()->role === 'cashier' && (int) $shift->user_id !== (int) $request->user()->id) {
+            abort(403, 'You can only close your own shift.');
+        }
+
+        $countedCash = (float) $data['counted_cash'];
+        $expected = (float) $shift->expected_cash;
+        $variance = round($countedCash - $expected, 2);
+
+        $shift->update([
+            'status' => 'closed',
+            'counted_cash' => $countedCash,
+            'variance_amount' => $variance,
+            'closed_by' => $request->user()->id,
+            'closed_at' => now(),
+            'notes' => trim(($shift->notes ? $shift->notes . "\n" : '') . ($data['notes'] ?? '')),
+        ]);
+
+        return back()->with('status', 'Shift closed.');
     }
 }

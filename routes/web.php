@@ -31,6 +31,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/expenses', [ModuleController::class, 'expenses'])->name('expenses');
     Route::get('/credit', [ModuleController::class, 'credit'])->name('credit');
     Route::get('/reports', [ModuleController::class, 'reports'])->name('reports');
+    Route::get('/shifts', [ModuleController::class, 'shifts'])->name('shifts');
     Route::get('/hotel', [ModuleController::class, 'hotel'])->name('hotel');
     Route::get('/users', [ModuleController::class, 'users'])->name('users');
     Route::get('/settings', [ModuleController::class, 'settings'])->name('settings');
@@ -49,5 +50,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/actions/customer', [ActionController::class, 'customer'])->name('actions.customer');
     Route::post('/actions/credit-payment', [ActionController::class, 'creditPayment'])->name('actions.credit-payment');
     Route::post('/actions/user', [ActionController::class, 'user'])->name('actions.user');
+    Route::post('/actions/user-status', [ActionController::class, 'userStatus'])->name('actions.user-status');
+    Route::post('/actions/shifts/open', [ActionController::class, 'openShift'])->name('actions.shifts.open');
+    Route::post('/actions/shifts/entry', [ActionController::class, 'shiftCashEntry'])->name('actions.shifts.entry');
+    Route::post('/actions/shifts/close', [ActionController::class, 'closeShift'])->name('actions.shifts.close');
     Route::post('/actions/settings', [ActionController::class, 'settings'])->name('actions.settings');
 });

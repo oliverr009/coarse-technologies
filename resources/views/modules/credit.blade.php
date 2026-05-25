@@ -221,7 +221,7 @@
             </div>
             <div class="credit-pad">
                 <div class="credit-mini">
-                    @forelse($customers->sortByDesc(fn ($customer) => (float) ($customer->credit_balance ?? 0))->take(8) as $customer)
+                    @forelse($creditWatchlist as $customer)
                         @php
                             $balance = (float) ($customer->credit_balance ?? 0);
                             $limit = (float) $customer->credit_limit;

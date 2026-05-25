@@ -19,6 +19,8 @@ use App\Models\RestaurantTable;
 use App\Models\Sale;
 use App\Models\SaleAdjustment;
 use App\Models\Setting;
+use App\Models\Shift;
+use App\Models\ShiftCashEntry;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\User;
@@ -195,10 +197,16 @@ class ModuleController extends Controller
                 return $limit > 0 && (float) ($customer->credit_balance ?? 0) >= ($limit * 0.8);
             })
             ->count();
+        $creditWatchlist = $customers
+            ->sortByDesc(function ($customer) {
+                return (float) ($customer->credit_balance ?? 0);
+            })
+            ->take(8);
 
         return view('modules.credit', [
             'customers' => $customers,
             'credits' => $credits,
+            'creditWatchlist' => $creditWatchlist,
             'summary' => [
                 'customers' => $customers->count(),
                 'outstanding' => $totalOutstanding,
@@ -268,6 +276,34 @@ class ModuleController extends Controller
     public function settings()
     {
         return view('modules.settings', ['settings' => Setting::query()->pluck('value', 'key')]);
+    }
+
+    public function shifts()
+    {
+        $activeShift = Shift::query()
+            ->with(['cashier', 'cashEntries.actor'])
+            ->where('user_id', request()->user()->id)
+            ->where('status', 'open')
+            ->latest('opened_at')
+            ->first();
+
+        $recentShifts = Shift::query()
+            ->with(['cashier', 'closer', 'cashEntries'])
+            ->when(! in_array(request()->user()->role, ['admin', 'manager'], true), function ($query) {
+                $query->where('user_id', request()->user()->id);
+            })
+            ->latest('opened_at')
+            ->limit(20)
+            ->get();
+
+        $summary = [
+            'open_shifts' => Shift::query()->where('status', 'open')->count(),
+            'today_shifts' => Shift::query()->whereDate('opened_at', today())->count(),
+            'today_variance' => (float) Shift::query()->whereDate('opened_at', today())->sum('variance_amount'),
+            'cash_entries' => ShiftCashEntry::query()->whereDate('created_at', today())->count(),
+        ];
+
+        return view('modules.shifts', compact('activeShift', 'recentShifts', 'summary'));
     }
 
     public function hotel()

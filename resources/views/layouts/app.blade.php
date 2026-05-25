@@ -12,6 +12,7 @@
         ['expenses', 'Expenses', 'ti ti-wallet', route('expenses')],
         ['credit', 'Credit Sales', 'ti ti-credit-card', route('credit')],
         ['reports', 'Reports', 'ti ti-chart-bar', route('reports')],
+        ['shifts', 'Shifts & Till', 'ti ti-cash-banknote', route('shifts')],
         ['users', 'Users & Roles', 'ti ti-users', route('users')],
         ['settings', 'Settings', 'ti ti-settings', route('settings')],
     ];
@@ -36,6 +37,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/tabler-icons.min.css">
     <link rel="stylesheet" href="{{ asset('assets/coarse-pos.css') }}?v={{ filemtime(public_path('assets/coarse-pos.css')) }}">
     <link rel="stylesheet" href="{{ asset('assets/advanced-pos.css') }}?v={{ filemtime(public_path('assets/advanced-pos.css')) }}">
+    <link rel="stylesheet" href="{{ asset('assets/theme-fixes.css') }}?v={{ filemtime(public_path('assets/theme-fixes.css')) }}">
 </head>
 <body>
 <a href="#main" class="skip-link">Skip to main content</a>

@@ -1,0 +1,60 @@
+html[data-theme=light] .inv-stat,
+html[data-theme=light] .inv-card,
+html[data-theme=light] .floor-stat,
+html[data-theme=light] .floor-card,
+html[data-theme=light] .ops-stat,
+html[data-theme=light] .ops-card,
+html[data-theme=light] .rec-stat,
+html[data-theme=light] .rec-card,
+html[data-theme=light] .pur-stat,
+html[data-theme=light] .pur-card,
+html[data-theme=light] .credit-stat,
+html[data-theme=light] .credit-card,
+html[data-theme=light] .kds-stat,
+html[data-theme=light] .kds-column,
+html[data-theme=light] .kds-ticket,
+html[data-theme=light] .shift-stat,
+html[data-theme=light] .shift-card,
+html[data-theme=light] .sft-stat,
+html[data-theme=light] .sft-card {
+    background: rgba(255, 255, 255, .94) !important;
+    border-color: rgba(27, 33, 83, .12) !important;
+    box-shadow: 0 18px 46px rgba(27, 33, 83, .09) !important;
+}
+
+html[data-theme=light] .inv-row,
+html[data-theme=light] .table-tile,
+html[data-theme=light] .mini-item,
+html[data-theme=light] .ops-mini-item,
+html[data-theme=light] .rec-recipe,
+html[data-theme=light] .credit-line,
+html[data-theme=light] .shift-line,
+html[data-theme=light] .sft-mini-item {
+    background: rgba(27, 33, 83, .035) !important;
+    border-color: rgba(27, 33, 83, .1) !important;
+}
+
+html[data-theme=light] .inv-head,
+html[data-theme=light] .floor-head,
+html[data-theme=light] .ops-head,
+html[data-theme=light] .rec-head,
+html[data-theme=light] .pur-head,
+html[data-theme=light] .credit-head,
+html[data-theme=light] .kds-head,
+html[data-theme=light] .shift-head {
+    border-bottom-color: rgba(27, 33, 83, .1) !important;
+}
+
+html[data-theme=light] .sft-head {
+    border-bottom-color: rgba(27, 33, 83, .1) !important;
+}
+
+html[data-theme=light] table,
+html[data-theme=light] th,
+html[data-theme=light] td {
+    border-color: rgba(27, 33, 83, .09);
+}
+
+html[data-theme=light] .login-logo {
+    color: var(--text);
+}
