@@ -34,8 +34,11 @@
 .set-green{background:rgba(62,207,142,.12);color:var(--green)}
 .set-gold{background:rgba(255,191,71,.12);color:var(--gold)}
 .set-blue{background:rgba(40,188,238,.12);color:var(--blue)}
+.set-printer-hero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.set-printer-route{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
 @media(max-width:1180px){.set-hero{grid-template-columns:repeat(2,1fr)}.set-grid-3{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:880px){.set-grid,.set-grid-3,.set-checks,.set-hero{grid-template-columns:1fr}}
+@media(max-width:1180px){.set-printer-hero{grid-template-columns:repeat(2,1fr)}.set-printer-route{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:880px){.set-grid,.set-grid-3,.set-checks,.set-hero,.set-printer-hero,.set-printer-route{grid-template-columns:1fr}}
 </style>
 
 <div class="set-shell">
@@ -192,6 +195,84 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="set-card">
+        <div class="set-card-head">
+            <div>
+                <div class="set-title">Printer Setup</div>
+                <div class="set-sub">Receipt, kitchen, and bar routing now live inside Settings instead of a separate module page.</div>
+            </div>
+            <span class="set-badge set-blue">Printing</span>
+        </div>
+        <div class="set-pad">
+            <div class="set-printer-hero" style="margin-bottom:16px">
+                <div class="set-stat"><div class="set-k">Auto Routes</div><div class="set-v">{{ $printerSummary['auto_routes'] }}</div><div class="set-h">Routes set to auto-print</div></div>
+                <div class="set-stat"><div class="set-k">Browser Routes</div><div class="set-v">{{ $printerSummary['browser_routes'] }}</div><div class="set-h">Outputs using browser print</div></div>
+                <div class="set-stat"><div class="set-k">Bar Categories</div><div class="set-v">{{ $printerSummary['bar_categories'] }}</div><div class="set-h">Groups sent to bar</div></div>
+                <div class="set-stat"><div class="set-k">Kitchen Categories</div><div class="set-v">{{ $printerSummary['kitchen_categories'] }}</div><div class="set-h">Groups sent to kitchen</div></div>
+            </div>
+
+            <form method="post" action="{{ route('actions.printers') }}" class="set-form">
+                @csrf
+                @foreach ([
+                    'receipt' => 'Receipt Printer',
+                    'kitchen' => 'Kitchen Printer',
+                    'bar' => 'Bar Printer',
+                ] as $prefix => $label)
+                    <div class="set-section">
+                        <div class="set-section-title">{{ $label }}</div>
+                        <div class="set-printer-route">
+                            <div><div class="lbl">Printer Name</div><input class="inp" name="{{ $prefix }}_printer_name" value="{{ $settings[$prefix.'_printer_name'] }}"></div>
+                            <div><div class="lbl">Connection Mode</div>
+                                <select class="inp" name="{{ $prefix }}_printer_connection">
+                                    <option value="browser" @selected($settings[$prefix.'_printer_connection'] === 'browser')>Browser Print</option>
+                                    <option value="network" @selected($settings[$prefix.'_printer_connection'] === 'network')>Network Printer</option>
+                                    <option value="windows_shared" @selected($settings[$prefix.'_printer_connection'] === 'windows_shared')>Windows Shared Queue</option>
+                                    <option value="usb" @selected($settings[$prefix.'_printer_connection'] === 'usb')>USB / Local</option>
+                                    <option value="agent" @selected($settings[$prefix.'_printer_connection'] === 'agent')>Local Print Agent</option>
+                                </select>
+                            </div>
+                            <div><div class="lbl">Target / Queue</div><input class="inp" name="{{ $prefix }}_printer_target" value="{{ $settings[$prefix.'_printer_target'] }}" placeholder="IP, queue, station, or share path"></div>
+                            <div><div class="lbl">Paper Size</div>
+                                <select class="inp" name="{{ $prefix }}_printer_paper">
+                                    <option value="80mm" @selected($settings[$prefix.'_printer_paper'] === '80mm')>80mm</option>
+                                    <option value="58mm" @selected($settings[$prefix.'_printer_paper'] === '58mm')>58mm</option>
+                                    <option value="A4" @selected($settings[$prefix.'_printer_paper'] === 'A4')>A4</option>
+                                </select>
+                            </div>
+                            <div><div class="lbl">Copies</div><input class="inp" type="number" min="1" max="5" name="{{ $prefix }}_printer_copies" value="{{ $settings[$prefix.'_printer_copies'] }}"></div>
+                        </div>
+                        <div class="set-checks" style="margin-top:12px">
+                            <label class="set-check">
+                                <input type="checkbox" name="{{ $prefix }}_printer_auto_print" value="1" @checked($settings[$prefix.'_printer_auto_print'])>
+                                <span><strong>Auto-print this route</strong><span>Browser mode opens the print dialog automatically; device modes remain saved for the print bridge layer.</span></span>
+                            </label>
+                        </div>
+                    </div>
+                @endforeach
+
+                <div class="set-section">
+                    <div class="set-section-title">Printer Routing Rules</div>
+                    <div class="set-grid">
+                        <div><div class="lbl">Bar Categories</div><input class="inp" name="bar_categories_csv" value="{{ $settings['bar_categories_csv'] }}" placeholder="Bar,Drinks,Cocktails,Mocktails"></div>
+                        <div><div class="lbl">Kitchen Categories</div><input class="inp" name="kitchen_categories_csv" value="{{ $settings['kitchen_categories_csv'] }}" placeholder="Mains,Sides,Breakfast,Pizza"></div>
+                    </div>
+                    <div class="set-checks" style="margin-top:12px">
+                        <label class="set-check">
+                            <input type="checkbox" name="print_reprint_requires_manager" value="1" @checked($settings['print_reprint_requires_manager'])>
+                            <span><strong>Manager approval for reprints</strong><span>Keep sensitive receipt or ticket reprints auditable.</span></span>
+                        </label>
+                        <label class="set-check">
+                            <input type="checkbox" name="print_logo_on_receipt" value="1" @checked($settings['print_logo_on_receipt'])>
+                            <span><strong>Print logo or brand header</strong><span>Use the receipt identity from Settings on customer receipts.</span></span>
+                        </label>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary">Save Printer Settings</button>
+            </form>
         </div>
     </div>
 </div>

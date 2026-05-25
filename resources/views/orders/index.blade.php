@@ -31,14 +31,15 @@
 .orders-stat{min-width:88px;padding:10px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)}
 .orders-stat span{display:block;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8e8184;margin-bottom:4px}
 .orders-stat strong{font-size:18px;color:#f6f2f1}
-.orders-filters{display:grid;grid-template-columns:minmax(0,1.15fr) 140px repeat(4,auto) auto auto;gap:8px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
+.orders-filters{display:grid;grid-template-columns:minmax(0,1.15fr) 140px repeat(4,auto) auto auto auto;gap:8px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
 .orders-search,.orders-select{height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#f6f2f1;padding:0 14px;font:inherit}
 .orders-search:focus,.orders-select:focus{outline:none;border-color:#f9b51c;box-shadow:0 0 0 3px rgba(249,181,28,.1)}
 .orders-pill{height:42px;padding:0 16px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:#c7bfc0;font-size:13px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
 .orders-pill.active{background:rgba(249,181,28,.14);border-color:rgba(249,181,28,.26);color:#f9b51c}
-.orders-submit,.orders-reset{height:42px;padding:0 16px;border-radius:12px;font-size:13px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.orders-submit,.orders-reset,.orders-shift{height:42px;padding:0 16px;border-radius:12px;font-size:13px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
 .orders-submit{border:none;background:linear-gradient(135deg,#f9b51c,#d79a39);color:#1f1a1b}
 .orders-reset{border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:#c7bfc0}
+.orders-shift{gap:7px;border:1px solid rgba(40,188,238,.26);background:rgba(40,188,238,.12);color:#28bcee}
 .orders-list{display:flex;flex-direction:column;overflow:auto}
 .order-row{display:grid;grid-template-columns:140px minmax(0,1.1fr) 120px 120px 84px;gap:14px;align-items:center;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06);color:#f6f2f1;text-decoration:none;transition:background .16s ease,border-color .16s ease}
 .order-row:hover{background:rgba(255,255,255,.035)}
@@ -87,6 +88,7 @@ html[data-theme=light] .orders-head,html[data-theme=light] .orders-filters,html[
 html[data-theme=light] .orders-title,html[data-theme=light] .orders-stat strong,html[data-theme=light] .order-time strong,html[data-theme=light] .order-main strong,html[data-theme=light] .order-total strong,html[data-theme=light] .preview-order,html[data-theme=light] .preview-meta strong,html[data-theme=light] .preview-item strong,html[data-theme=light] .preview-total strong,html[data-theme=light] .preview-empty strong,html[data-theme=light] .empty-orders strong{color:#172047}
 html[data-theme=light] .orders-copy,html[data-theme=light] .order-time span,html[data-theme=light] .order-main span,html[data-theme=light] .order-total span,html[data-theme=light] .preview-sub,html[data-theme=light] .preview-item span,html[data-theme=light] .preview-note,html[data-theme=light] .preview-empty,html[data-theme=light] .empty-orders{color:#64748b}
 html[data-theme=light] .orders-stat,html[data-theme=light] .preview-card,html[data-theme=light] .preview-meta,html[data-theme=light] .preview-note,html[data-theme=light] .preview-action,html[data-theme=light] .orders-reset,html[data-theme=light] .orders-pill{border-color:rgba(27,33,83,.10);background:rgba(27,33,83,.035);color:#475569}
+html[data-theme=light] .orders-shift{border-color:rgba(40,188,238,.28);background:rgba(40,188,238,.10);color:#0b82a8}
 html[data-theme=light] .orders-search,html[data-theme=light] .orders-select{border-color:rgba(27,33,83,.12);background:#fff;color:#172047}
 html[data-theme=light] .orders-select option{background:#fff;color:#172047}
 html[data-theme=light] .order-row{color:#172047}
@@ -128,6 +130,7 @@ html[data-theme=light] .preview-total{background:linear-gradient(135deg,rgba(249
             <a class="orders-pill {{ $queryType === 'delivery' ? 'active' : '' }}" href="{{ route('orders', ['type' => 'delivery', 'status' => $queryStatus !== 'active' ? $queryStatus : null, 'search' => $querySearch ?: null]) }}">Delivery</a>
             <button class="orders-submit" type="submit">Apply</button>
             <a class="orders-reset" href="{{ route('orders') }}">Reset</a>
+            <a class="orders-shift" href="{{ route('shifts') }}"><i class="ti ti-cash-banknote" aria-hidden="true"></i> Shift</a>
         </form>
 
         <div class="orders-list">

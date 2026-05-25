@@ -328,6 +328,28 @@ class ModuleController extends Controller
             'default_guest_count' => 1,
             'allow_negative_inventory' => false,
             'table_required_for_dine_in' => false,
+            'receipt_printer_name' => 'Front Cashier Receipt Printer',
+            'receipt_printer_connection' => 'browser',
+            'receipt_printer_target' => 'This browser / cashier station',
+            'receipt_printer_paper' => '80mm',
+            'receipt_printer_auto_print' => false,
+            'receipt_printer_copies' => 1,
+            'kitchen_printer_name' => 'Main Kitchen Printer',
+            'kitchen_printer_connection' => 'browser',
+            'kitchen_printer_target' => 'Kitchen ticket browser',
+            'kitchen_printer_paper' => '80mm',
+            'kitchen_printer_auto_print' => false,
+            'kitchen_printer_copies' => 1,
+            'bar_printer_name' => 'Bar Printer',
+            'bar_printer_connection' => 'browser',
+            'bar_printer_target' => 'Bar station browser',
+            'bar_printer_paper' => '80mm',
+            'bar_printer_auto_print' => false,
+            'bar_printer_copies' => 1,
+            'bar_categories_csv' => 'Bar,Drinks,Cocktails,Mocktails,Milkshakes,Tea & Chocolate,Barista Corner',
+            'kitchen_categories_csv' => 'Mains,Sides,Breakfast,Snacks,Salads,Soups,Burgers,Sandwiches,Pizza,Desserts,Kids Menu',
+            'print_reprint_requires_manager' => true,
+            'print_logo_on_receipt' => true,
         ])->merge($stored);
 
         return view('modules.settings', [
@@ -342,6 +364,12 @@ class ModuleController extends Controller
                     'credit' => $settings['payment_credit_enabled'],
                 ])->filter()->count(),
                 'approval_threshold' => (float) $settings['discount_approval_threshold'],
+            ],
+            'printerSummary' => [
+                'auto_routes' => collect([$settings['receipt_printer_auto_print'], $settings['kitchen_printer_auto_print'], $settings['bar_printer_auto_print']])->filter()->count(),
+                'browser_routes' => collect([$settings['receipt_printer_connection'], $settings['kitchen_printer_connection'], $settings['bar_printer_connection']])->filter(fn ($value) => $value === 'browser')->count(),
+                'bar_categories' => collect(explode(',', (string) $settings['bar_categories_csv']))->filter(fn ($value) => trim($value) !== '')->count(),
+                'kitchen_categories' => collect(explode(',', (string) $settings['kitchen_categories_csv']))->filter(fn ($value) => trim($value) !== '')->count(),
             ],
         ]);
     }

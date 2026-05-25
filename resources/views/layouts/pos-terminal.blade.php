@@ -12,9 +12,7 @@
         ['expenses', 'Expenses', 'ti ti-wallet', route('expenses')],
         ['credit', 'Credit Sales', 'ti ti-credit-card', route('credit')],
         ['reports', 'Reports', 'ti ti-chart-bar', route('reports')],
-        ['shifts', 'Shifts & Till', 'ti ti-cash-banknote', route('shifts')],
         ['users', 'Users & Roles', 'ti ti-users', route('users')],
-        ['printers', 'Printers', 'ti ti-printer', route('printers')],
         ['settings', 'Settings', 'ti ti-settings', route('settings')],
     ];
 @endphp

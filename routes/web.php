@@ -34,7 +34,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/shifts', [ModuleController::class, 'shifts'])->name('shifts');
     Route::get('/hotel', [ModuleController::class, 'hotel'])->name('hotel');
     Route::get('/users', [ModuleController::class, 'users'])->name('users');
-    Route::get('/printers', [ModuleController::class, 'printers'])->name('printers');
+    Route::get('/printers', fn () => redirect()->route('settings'))->name('printers');
     Route::get('/settings', [ModuleController::class, 'settings'])->name('settings');
 
     Route::post('/actions/product', [ActionController::class, 'product'])->name('actions.product');
