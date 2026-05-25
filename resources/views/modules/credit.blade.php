@@ -82,28 +82,30 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($customers as $customer)
-                            @php
-                                $balance = (float) ($customer->credit_balance ?? 0);
-                                $limit = (float) $customer->credit_limit;
-                                $usage = $limit > 0 ? min(100, max(0, ($balance / $limit) * 100)) : 0;
-                            @endphp
-                            <tr>
-                                <td>
-                                    <strong>{{ $customer->name }}</strong>
-                                    <div style="color:var(--text3);font-size:11px">{{ $customer->phone ?: 'No phone' }} @if($customer->email) · {{ $customer->email }} @endif</div>
-                                </td>
-                                <td style="color:{{ $balance > 0 ? 'var(--gold)' : 'var(--green)' }}">KES {{ number_format($balance, 2) }}</td>
-                                <td>KES {{ number_format($limit, 2) }}</td>
-                                <td>
-                                    <div>{{ number_format($usage, 0) }}%</div>
-                                    <div class="credit-meter"><div class="credit-fill" style="width:{{ $usage }}%"></div></div>
-                                </td>
-                                <td>{{ $customer->sales_count }}</td>
-                            </tr>
-                        @empty
+                        @if($customers->isEmpty())
                             <tr><td colspan="5" style="color:var(--text3)">No customers created yet.</td></tr>
-                        @endforelse
+                        @else
+                            @foreach($customers as $customer)
+                                @php
+                                    $balance = (float) ($customer->credit_balance ?? 0);
+                                    $limit = (float) $customer->credit_limit;
+                                    $usage = $limit > 0 ? min(100, max(0, ($balance / $limit) * 100)) : 0;
+                                @endphp
+                                <tr>
+                                    <td>
+                                        <strong>{{ $customer->name }}</strong>
+                                        <div style="color:var(--text3);font-size:11px">{{ $customer->phone ?: 'No phone' }} @if($customer->email) · {{ $customer->email }} @endif</div>
+                                    </td>
+                                    <td style="color:{{ $balance > 0 ? 'var(--gold)' : 'var(--green)' }}">KES {{ number_format($balance, 2) }}</td>
+                                    <td>KES {{ number_format($limit, 2) }}</td>
+                                    <td>
+                                        <div>{{ number_format($usage, 0) }}%</div>
+                                        <div class="credit-meter"><div class="credit-fill" style="width:{{ $usage }}%"></div></div>
+                                    </td>
+                                    <td>{{ $customer->sales_count }}</td>
+                                </tr>
+                            @endforeach
+                        @endif
                     </tbody>
                 </table>
             </div>
@@ -129,21 +131,23 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($credits as $entry)
-                            <tr>
-                                <td>{{ $entry->created_at?->format('d M H:i') }}</td>
-                                <td>{{ $entry->customer?->name ?? '-' }}</td>
-                                <td><span class="credit-badge {{ (float) $entry->amount >= 0 ? 'gold' : 'green' }}">{{ $entry->type }}</span></td>
-                                <td style="color:{{ (float) $entry->amount >= 0 ? 'var(--gold)' : 'var(--green)' }}">{{ (float) $entry->amount >= 0 ? '+' : '-' }}KES {{ number_format(abs((float) $entry->amount), 2) }}</td>
-                                <td>{{ $entry->due_date?->format('d M Y') ?? '-' }}</td>
-                                <td>
-                                    {{ $entry->sale?->sale_number ?? 'Manual' }}
-                                    @if($entry->notes)<div style="color:var(--text3);font-size:11px">{{ $entry->notes }}</div>@endif
-                                </td>
-                            </tr>
-                        @empty
+                        @if($credits->isEmpty())
                             <tr><td colspan="6" style="color:var(--text3)">No credit activity yet.</td></tr>
-                        @endforelse
+                        @else
+                            @foreach($credits as $entry)
+                                <tr>
+                                    <td>{{ $entry->created_at?->format('d M H:i') }}</td>
+                                    <td>{{ $entry->customer?->name ?? '-' }}</td>
+                                    <td><span class="credit-badge {{ (float) $entry->amount >= 0 ? 'gold' : 'green' }}">{{ $entry->type }}</span></td>
+                                    <td style="color:{{ (float) $entry->amount >= 0 ? 'var(--gold)' : 'var(--green)' }}">{{ (float) $entry->amount >= 0 ? '+' : '-' }}KES {{ number_format(abs((float) $entry->amount), 2) }}</td>
+                                    <td>{{ $entry->due_date?->format('d M Y') ?? '-' }}</td>
+                                    <td>
+                                        {{ $entry->sale?->sale_number ?? 'Manual' }}
+                                        @if($entry->notes)<div style="color:var(--text3);font-size:11px">{{ $entry->notes }}</div>@endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        @endif
                     </tbody>
                 </table>
             </div>
@@ -188,7 +192,9 @@
                             <select class="inp" name="customer_id" required>
                                 <option value="">Choose customer</option>
                                 @foreach($customers as $customer)
-                                    @php($balance = (float) ($customer->credit_balance ?? 0))
+                                    @php
+                                        $balance = (float) ($customer->credit_balance ?? 0);
+                                    @endphp
                                     <option value="{{ $customer->id }}">{{ $customer->name }} · KES {{ number_format($balance, 2) }}</option>
                                 @endforeach
                             </select>
@@ -221,21 +227,23 @@
             </div>
             <div class="credit-pad">
                 <div class="credit-mini">
-                    @forelse($creditWatchlist as $customer)
-                        @php
-                            $balance = (float) ($customer->credit_balance ?? 0);
-                            $limit = (float) $customer->credit_limit;
-                        @endphp
-                        <div class="credit-line">
-                            <div>
-                                <strong>{{ $customer->name }}</strong>
-                                <span>Limit KES {{ number_format($limit, 0) }} · {{ $customer->phone ?: 'No phone' }}</span>
-                            </div>
-                            <span class="credit-badge {{ $balance > 0 ? 'gold' : 'green' }}">KES {{ number_format($balance, 0) }}</span>
-                        </div>
-                    @empty
+                    @if($creditWatchlist->isEmpty())
                         <div style="color:var(--text3);font-size:12px">No customer balances yet.</div>
-                    @endforelse
+                    @else
+                        @foreach($creditWatchlist as $customer)
+                            @php
+                                $balance = (float) ($customer->credit_balance ?? 0);
+                                $limit = (float) $customer->credit_limit;
+                            @endphp
+                            <div class="credit-line">
+                                <div>
+                                    <strong>{{ $customer->name }}</strong>
+                                    <span>Limit KES {{ number_format($limit, 0) }} · {{ $customer->phone ?: 'No phone' }}</span>
+                                </div>
+                                <span class="credit-badge {{ $balance > 0 ? 'gold' : 'green' }}">KES {{ number_format($balance, 0) }}</span>
+                            </div>
+                        @endforeach
+                    @endif
                 </div>
             </div>
         </div>

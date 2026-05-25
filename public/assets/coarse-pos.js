@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedOrderId = String(root.dataset.selectedOrder || '');
     const modalIds = ['mVoid', 'mNote', 'mDisc', 'mSplit'];
     const money = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    const recentKey = 'coarse-pos-recent-products';
 
     const orderTypeButtons = [...root.querySelectorAll('[data-order-type-btn]')];
     const categoryButtons = [...root.querySelectorAll('[data-pos-category]')];
@@ -58,6 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const productSections = [...root.querySelectorAll('[data-pos-section]')];
     const searchInput = root.querySelector('[data-pos-search]');
     const searchClear = root.querySelector('[data-pos-search-clear]');
+    const emptyResults = root.querySelector('[data-pos-empty]');
+    const recentCountNodes = [...root.querySelectorAll('[data-recent-count]')];
     const cartBox = root.querySelector('[data-cart-items]');
     const tableSelect = root.querySelector('[data-table-select]');
     const customerSelect = root.querySelector('[data-customer-select]');
@@ -101,6 +104,33 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (_error) {
             return {};
         }
+    };
+
+    const recentIds = () => {
+        try {
+            return JSON.parse(localStorage.getItem(recentKey) || '[]').map(String);
+        } catch (_error) {
+            return [];
+        }
+    };
+
+    const setRecentIds = (ids) => {
+        const nextIds = ids.slice(0, 12).map(String);
+        localStorage.setItem(recentKey, JSON.stringify(nextIds));
+        recentCountNodes.forEach((node) => { node.textContent = String(nextIds.length); });
+    };
+
+    const rememberRecent = (productId) => {
+        const id = String(productId);
+        setRecentIds([id, ...recentIds().filter((itemId) => itemId !== id)]);
+    };
+
+    const toast = (message, tone = 'blue') => {
+        const note = document.createElement('div');
+        note.className = `pos-toast ${tone}`;
+        note.textContent = message;
+        root.appendChild(note);
+        window.setTimeout(() => note.remove(), 1700);
     };
 
     const totals = () => {
@@ -211,6 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="empty-cart">
                     <i class="ti ti-basket" aria-hidden="true"></i>
                     <p>No items yet</p>
+                    <span>Tap a product to add it here.</span>
                 </div>
             `;
         }
@@ -296,15 +327,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const filterProducts = () => {
+        const recent = recentIds();
+        let totalVisible = 0;
         productButtons.forEach((button) => {
             const product = parseJson(button.dataset.posProduct);
-            const categoryMatch = state.category === 'all' || product.category === state.category;
+            const categoryMatch = state.category === 'all'
+                || (state.category === 'recent' ? recent.includes(String(product.id)) : product.category === state.category);
             const searchMatch = !state.search || [product.name, product.category, product.subcategory, product.sku, product.barcode]
                 .filter(Boolean)
                 .join(' ')
                 .toLowerCase()
                 .includes(state.search);
-            button.hidden = !(categoryMatch && searchMatch);
+            const visible = categoryMatch && searchMatch;
+            button.hidden = !visible;
+            if (visible) totalVisible += 1;
         });
         productSections.forEach((section) => {
             const visibleCount = [...section.querySelectorAll('[data-pos-product]')].filter((button) => !button.hidden).length;
@@ -315,6 +351,8 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryButtons.forEach((button) => {
             button.classList.toggle('active', button.dataset.posCategory === state.category);
         });
+        recentCountNodes.forEach((node) => { node.textContent = String(recent.length); });
+        if (emptyResults) emptyResults.hidden = totalVisible > 0;
         if (searchClear) searchClear.hidden = state.search.length === 0;
     };
 
@@ -429,6 +467,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     kdsStatus: state.status === 'pending' ? 'cooking' : 'pending',
                 });
             }
+            rememberRecent(product.id);
+            filterProducts();
+            toast(`${product.name} added`, 'green');
             render();
         });
     });

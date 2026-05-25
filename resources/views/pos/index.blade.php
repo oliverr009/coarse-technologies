@@ -109,6 +109,9 @@
                 <button class="cat-tile active" type="button" data-pos-category="all">
                     All Items <span class="ct-count">{{ $products->count() }}</span>
                 </button>
+                <button class="cat-tile" type="button" data-pos-category="recent">
+                    🕘 Recent <span class="ct-count" data-recent-count>0</span>
+                </button>
                 @foreach($categories as $category)
                     <button class="cat-tile" type="button" data-pos-category="{{ $category }}">
                         {{ $categoryEmoji[$category] ?? '🍽️' }} {{ $category }}
@@ -150,6 +153,11 @@
                         </div>
                     </section>
                     @endforeach
+                <div class="pos-empty-results" data-pos-empty hidden>
+                    <i class="ti ti-search-off" aria-hidden="true"></i>
+                    <strong>No matching items</strong>
+                    <span>Try another search term or switch category.</span>
+                </div>
             </div>
         </div>
 
@@ -186,6 +194,7 @@
                 <div class="empty-cart">
                     <i class="ti ti-basket" aria-hidden="true"></i>
                     <p>No items yet</p>
+                    <span>Tap a product to add it here.</span>
                 </div>
             </div>
 
