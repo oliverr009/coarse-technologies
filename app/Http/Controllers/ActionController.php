@@ -6,6 +6,9 @@ use App\Models\Category;
 use App\Models\CreditAccount;
 use App\Models\Customer;
 use App\Models\Expense;
+use App\Models\HotelFolio;
+use App\Models\HotelReservation;
+use App\Models\HotelRoom;
 use App\Models\InventoryAdjustment;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -698,5 +701,211 @@ class ActionController extends Controller
         ]);
 
         return back()->with('status', 'Shift closed.');
+    }
+
+    public function hotelReservation(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'hotel');
+        $data = $request->validate([
+            'room_type_id' => ['nullable', 'exists:hotel_room_types,id'],
+            'hotel_room_id' => ['nullable', 'exists:hotel_rooms,id'],
+            'guest_name' => ['required', 'string', 'max:160'],
+            'guest_phone' => ['nullable', 'string', 'max:80'],
+            'guest_email' => ['nullable', 'email', 'max:160'],
+            'check_in_date' => ['required', 'date'],
+            'check_out_date' => ['required', 'date', 'after:check_in_date'],
+            'guests' => ['required', 'integer', 'min:1', 'max:20'],
+            'rate_plan' => ['nullable', 'string', 'max:80'],
+            'nightly_rate' => ['required', 'numeric', 'min:0'],
+            'deposit_amount' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        DB::transaction(function () use ($data, $request) {
+            $reservation = HotelReservation::query()->create([
+                ...$data,
+                'rate_plan' => $data['rate_plan'] ?: 'rack',
+                'deposit_amount' => $data['deposit_amount'] ?? 0,
+                'status' => 'confirmed',
+                'created_by' => $request->user()->id,
+            ]);
+
+            Customer::query()->updateOrCreate(
+                ['phone' => $data['guest_phone'] ?: 'hotel-' . $reservation->id],
+                ['name' => $data['guest_name'], 'email' => $data['guest_email'] ?? null]
+            );
+
+            if (! empty($data['hotel_room_id'])) {
+                HotelRoom::query()->whereKey($data['hotel_room_id'])->update([
+                    'status' => 'reserved',
+                    'current_rate' => $data['nightly_rate'],
+                    'active_guest_name' => $data['guest_name'],
+                ]);
+            }
+        });
+
+        return back()->with('status', 'Hotel reservation confirmed.');
+    }
+
+    public function hotelCheckIn(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'hotel');
+        $data = $request->validate([
+            'hotel_reservation_id' => ['nullable', 'exists:hotel_reservations,id'],
+            'hotel_room_id' => ['required', 'exists:hotel_rooms,id'],
+            'guest_name' => ['required_without:hotel_reservation_id', 'nullable', 'string', 'max:160'],
+            'guest_phone' => ['nullable', 'string', 'max:80'],
+            'check_out_date' => ['required_without:hotel_reservation_id', 'nullable', 'date', 'after_or_equal:today'],
+            'room_rate' => ['nullable', 'numeric', 'min:0'],
+            'deposit_amount' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        try {
+            DB::transaction(function () use ($data, $request) {
+                $reservation = ! empty($data['hotel_reservation_id'])
+                    ? HotelReservation::query()->findOrFail((int) $data['hotel_reservation_id'])
+                    : null;
+
+                $room = HotelRoom::query()->with('roomType')->lockForUpdate()->findOrFail((int) $data['hotel_room_id']);
+                if ($room->status === 'occupied') {
+                    throw new \RuntimeException('This room is already occupied.');
+                }
+
+                $guestName = $reservation?->guest_name ?: (string) $data['guest_name'];
+                $guestPhone = $reservation?->guest_phone ?: ($data['guest_phone'] ?? null);
+                $checkoutDate = $reservation?->check_out_date ?: \Illuminate\Support\Carbon::parse($data['check_out_date']);
+                $rate = (float) ($data['room_rate'] ?? $reservation?->nightly_rate ?? $room->current_rate ?? $room->roomType?->base_rate ?? 0);
+                $nights = max(1, now()->startOfDay()->diffInDays($checkoutDate->copy()->startOfDay()));
+                $roomCharges = round($rate * $nights, 2);
+                $deposit = (float) ($data['deposit_amount'] ?? $reservation?->deposit_amount ?? 0);
+                $balance = round($roomCharges - $deposit, 2);
+
+                $folio = HotelFolio::query()->create([
+                    'hotel_reservation_id' => $reservation?->id,
+                    'hotel_room_id' => $room->id,
+                    'guest_name' => $guestName,
+                    'guest_phone' => $guestPhone,
+                    'checked_in_at' => now(),
+                    'expected_checkout_at' => $checkoutDate->copy()->endOfDay(),
+                    'room_rate' => $rate,
+                    'room_charges' => $roomCharges,
+                    'payments' => $deposit,
+                    'balance' => $balance,
+                    'status' => 'open',
+                    'notes' => $data['notes'] ?? null,
+                    'created_by' => $request->user()->id,
+                ]);
+
+                $folio->items()->create([
+                    'item_type' => 'room_charge',
+                    'description' => $nights . ' night(s) room charge',
+                    'amount' => $roomCharges,
+                    'posted_by' => $request->user()->id,
+                ]);
+
+                if ($deposit > 0) {
+                    $folio->items()->create([
+                        'item_type' => 'payment',
+                        'description' => 'Deposit / check-in payment',
+                        'amount' => -abs($deposit),
+                        'posted_by' => $request->user()->id,
+                    ]);
+                }
+
+                $room->update([
+                    'status' => 'occupied',
+                    'housekeeping_status' => 'clean',
+                    'active_guest_name' => $guestName,
+                    'active_folio_balance' => $balance,
+                    'current_rate' => $rate,
+                ]);
+
+                $reservation?->update([
+                    'hotel_room_id' => $room->id,
+                    'status' => 'checked_in',
+                ]);
+            });
+        } catch (\Throwable $e) {
+            return back()->withErrors(['hotel_checkin' => $e->getMessage()])->withInput();
+        }
+
+        return back()->with('status', 'Guest checked in and folio opened.');
+    }
+
+    public function hotelCheckout(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'hotel');
+        $data = $request->validate([
+            'hotel_folio_id' => ['required', 'exists:hotel_folios,id'],
+            'payment_amount' => ['nullable', 'numeric', 'min:0'],
+            'payment_method' => ['required', 'in:cash,mpesa,card,bank,credit'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        try {
+            DB::transaction(function () use ($data, $request) {
+                $folio = HotelFolio::query()->with(['room', 'reservation'])->lockForUpdate()->findOrFail((int) $data['hotel_folio_id']);
+                if ($folio->status !== 'open') {
+                    throw new \RuntimeException('This folio is already closed.');
+                }
+
+                $payment = round((float) ($data['payment_amount'] ?? 0), 2);
+                $balanceBefore = (float) $folio->balance;
+                if ($payment < $balanceBefore) {
+                    throw new \RuntimeException('Payment must clear the folio balance before check-out.');
+                }
+
+                if ($payment > 0) {
+                    $folio->items()->create([
+                        'item_type' => 'payment',
+                        'description' => 'Check-out payment via ' . strtoupper($data['payment_method']),
+                        'amount' => -abs($payment),
+                        'posted_by' => $request->user()->id,
+                    ]);
+                }
+
+                $folio->update([
+                    'payments' => round((float) $folio->payments + $payment, 2),
+                    'balance' => round($balanceBefore - $payment, 2),
+                    'status' => 'closed',
+                    'checked_out_at' => now(),
+                    'closed_by' => $request->user()->id,
+                    'notes' => trim(($folio->notes ? $folio->notes . "\n" : '') . ($data['notes'] ?? '')),
+                ]);
+
+                $folio->room?->update([
+                    'status' => 'dirty',
+                    'housekeeping_status' => 'dirty',
+                    'active_guest_name' => null,
+                    'active_folio_balance' => 0,
+                ]);
+
+                $folio->reservation?->update(['status' => 'checked_out']);
+            });
+        } catch (\Throwable $e) {
+            return back()->withErrors(['hotel_checkout' => $e->getMessage()])->withInput();
+        }
+
+        return back()->with('status', 'Guest checked out and room sent to housekeeping.');
+    }
+
+    public function hotelRoomStatus(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'hotel');
+        $data = $request->validate([
+            'hotel_room_id' => ['required', 'exists:hotel_rooms,id'],
+            'status' => ['required', 'in:vacant_clean,occupied,reserved,dirty,out_of_order'],
+            'housekeeping_status' => ['required', 'in:clean,dirty,inspected,out_of_order'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        HotelRoom::query()->whereKey($data['hotel_room_id'])->update([
+            'status' => $data['status'],
+            'housekeeping_status' => $data['housekeeping_status'],
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        return back()->with('status', 'Room status updated.');
     }
 }

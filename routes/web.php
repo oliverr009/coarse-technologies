@@ -57,6 +57,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/actions/shifts/open', [ActionController::class, 'openShift'])->name('actions.shifts.open');
     Route::post('/actions/shifts/entry', [ActionController::class, 'shiftCashEntry'])->name('actions.shifts.entry');
     Route::post('/actions/shifts/close', [ActionController::class, 'closeShift'])->name('actions.shifts.close');
+    Route::post('/actions/hotel/reservation', [ActionController::class, 'hotelReservation'])->name('actions.hotel.reservation');
+    Route::post('/actions/hotel/check-in', [ActionController::class, 'hotelCheckIn'])->name('actions.hotel.check-in');
+    Route::post('/actions/hotel/check-out', [ActionController::class, 'hotelCheckout'])->name('actions.hotel.check-out');
+    Route::post('/actions/hotel/room-status', [ActionController::class, 'hotelRoomStatus'])->name('actions.hotel.room-status');
     Route::post('/actions/printers', [ActionController::class, 'printers'])->name('actions.printers');
     Route::post('/actions/settings', [ActionController::class, 'settings'])->name('actions.settings');
 });

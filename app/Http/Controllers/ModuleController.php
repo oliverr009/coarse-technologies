@@ -6,6 +6,8 @@ use App\Models\Category;
 use App\Models\CreditAccount;
 use App\Models\Customer;
 use App\Models\Expense;
+use App\Models\HotelFolio;
+use App\Models\HotelReservation;
 use App\Models\HotelRoom;
 use App\Models\HotelRoomType;
 use App\Models\InventoryAdjustment;
@@ -445,14 +447,16 @@ class ModuleController extends Controller
     public function hotel(RolePermissionService $permissions)
     {
         $permissions->authorize(request()->user(), 'hotel');
-        $reservations = Reservation::query()
+        $today = today();
+
+        $legacyReservations = Reservation::query()
             ->with('table')
             ->orderBy('reserved_for')
-            ->limit(14)
+            ->limit(8)
             ->get();
 
         $roomTypes = Schema::hasTable('hotel_room_types')
-            ? HotelRoomType::query()->withCount('rooms')->orderBy('name')->get()
+            ? HotelRoomType::query()->withCount('rooms')->where('is_active', true)->orderBy('name')->get()
             : collect([
                 (object) ['name' => 'Standard King', 'code' => 'STD-K', 'base_rate' => 6200, 'max_occupancy' => 2, 'rooms_count' => 8],
                 (object) ['name' => 'Deluxe Twin', 'code' => 'DLX-T', 'base_rate' => 7800, 'max_occupancy' => 2, 'rooms_count' => 6],
@@ -461,7 +465,7 @@ class ModuleController extends Controller
             ]);
 
         $rooms = Schema::hasTable('hotel_rooms')
-            ? HotelRoom::query()->with('roomType')->orderBy('room_number')->get()
+            ? HotelRoom::query()->with(['roomType', 'folios' => fn ($query) => $query->where('status', 'open')])->where('is_active', true)->orderBy('room_number')->get()
             : collect([
                 (object) ['room_number' => '101', 'floor' => '1', 'status' => 'occupied', 'housekeeping_status' => 'clean', 'active_guest_name' => 'In-house Guest', 'active_folio_balance' => 12400, 'current_rate' => 6200, 'roomType' => (object) ['name' => 'Standard King']],
                 (object) ['room_number' => '102', 'floor' => '1', 'status' => 'vacant_clean', 'housekeeping_status' => 'clean', 'active_guest_name' => null, 'active_folio_balance' => 0, 'current_rate' => 6200, 'roomType' => (object) ['name' => 'Standard King']],
@@ -471,12 +475,54 @@ class ModuleController extends Controller
                 (object) ['room_number' => '302', 'floor' => '3', 'status' => 'out_of_order', 'housekeeping_status' => 'out_of_order', 'active_guest_name' => null, 'active_folio_balance' => 0, 'current_rate' => 0, 'roomType' => (object) ['name' => 'Garden Suite']],
             ]);
 
+        $hotelReservations = Schema::hasTable('hotel_reservations')
+            ? HotelReservation::query()
+                ->with(['roomType', 'room'])
+                ->whereIn('status', ['confirmed', 'checked_in'])
+                ->orderBy('check_in_date')
+                ->limit(30)
+                ->get()
+            : collect();
+
+        $openFolios = Schema::hasTable('hotel_folios')
+            ? HotelFolio::query()
+                ->with(['room.roomType', 'reservation', 'items'])
+                ->where('status', 'open')
+                ->orderBy('expected_checkout_at')
+                ->get()
+            : collect();
+
+        $recentFolios = Schema::hasTable('hotel_folios')
+            ? HotelFolio::query()
+                ->with(['room.roomType'])
+                ->latest('updated_at')
+                ->limit(10)
+                ->get()
+            : collect();
+
+        $availableByType = $roomTypes->map(function ($type) use ($rooms) {
+            $typeRooms = $rooms->where('room_type_id', $type->id ?? null);
+            if (! isset($type->id)) {
+                $typeRooms = $rooms->filter(fn ($room) => ($room->roomType->name ?? null) === $type->name);
+            }
+
+            return (object) [
+                'name' => $type->name,
+                'base_rate' => $type->base_rate ?? 0,
+                'available' => $typeRooms->where('status', 'vacant_clean')->count(),
+                'reserved' => $typeRooms->where('status', 'reserved')->count(),
+                'occupied' => $typeRooms->where('status', 'occupied')->count(),
+                'dirty' => $typeRooms->where('status', 'dirty')->count(),
+            ];
+        });
+
         $guestProfiles = Customer::query()
             ->orderByDesc('updated_at')
             ->limit(10)
             ->get()
-            ->map(function ($customer) use ($reservations) {
-                $reservationCount = $reservations->where('customer_phone', $customer->phone)->count();
+            ->map(function ($customer) use ($legacyReservations, $hotelReservations) {
+                $reservationCount = $legacyReservations->where('customer_phone', $customer->phone)->count()
+                    + $hotelReservations->where('guest_phone', $customer->phone)->count();
 
                 return (object) [
                     'name' => $customer->name,
@@ -487,7 +533,40 @@ class ModuleController extends Controller
                 ];
             });
 
-        $reservationGuests = $reservations
+        $reservationGuests = $hotelReservations
+            ->map(fn ($reservation) => (object) [
+                'name' => $reservation->guest_name,
+                'phone' => $reservation->guest_phone,
+                'email' => $reservation->guest_email,
+                'profile_source' => 'Hotel reservation',
+                'activity_hint' => ucfirst(str_replace('_', ' ', $reservation->status)) . ' · ' . $reservation->check_in_date?->format('d M') . ' to ' . $reservation->check_out_date?->format('d M'),
+            ])
+            ->concat($legacyReservations
+                ->groupBy(fn ($reservation) => trim(strtolower(($reservation->customer_name ?? '') . '|' . ($reservation->customer_phone ?? ''))))
+                ->filter(fn ($rows, $key) => $key !== '|')
+                ->map(function ($rows) {
+                    $reservation = $rows->first();
+
+                    return (object) [
+                        'name' => $reservation->customer_name ?: 'Unnamed guest',
+                        'phone' => $reservation->customer_phone,
+                        'email' => null,
+                        'profile_source' => 'Restaurant reservation',
+                        'activity_hint' => $rows->count() . ' reservation(s) on record',
+                    ];
+                })
+                ->values());
+
+        $checkInQueue = $hotelReservations
+            ->where('status', 'confirmed')
+            ->filter(fn ($reservation) => $reservation->check_in_date <= $today->copy()->addDays(7))
+            ->values();
+
+        $departureQueue = $openFolios
+            ->filter(fn ($folio) => $folio->expected_checkout_at?->toDateString() <= $today->copy()->addDays(1)->toDateString())
+            ->values();
+
+        $legacyReservationGuests = $legacyReservations
             ->groupBy(fn ($reservation) => trim(strtolower(($reservation->customer_name ?? '') . '|' . ($reservation->customer_phone ?? ''))))
             ->filter(fn ($rows, $key) => $key !== '|')
             ->map(function ($rows) {
@@ -513,7 +592,13 @@ class ModuleController extends Controller
             'roomTypes' => $roomTypes,
             'rooms' => $rooms,
             'guestProfiles' => $guestProfiles,
-            'reservations' => $reservations,
+            'reservations' => $legacyReservations,
+            'hotelReservations' => $hotelReservations,
+            'openFolios' => $openFolios,
+            'recentFolios' => $recentFolios,
+            'availableByType' => $availableByType,
+            'checkInQueue' => $checkInQueue,
+            'departureQueue' => $departureQueue,
             'summary' => [
                 'occupied' => $rooms->where('status', 'occupied')->count(),
                 'reserved' => $rooms->where('status', 'reserved')->count(),
@@ -521,10 +606,13 @@ class ModuleController extends Controller
                 'dirty' => $rooms->where('status', 'dirty')->count(),
                 'out_of_order' => $rooms->where('status', 'out_of_order')->count(),
                 'folios' => $rooms->filter(fn ($room) => (float) ($room->active_folio_balance ?? 0) > 0)->count(),
-                'reservation_feed' => $reservations->count(),
+                'reservation_feed' => $hotelReservations->count() + $legacyReservations->count(),
                 'room_types' => $roomTypes->count(),
                 'guest_profiles' => $guestProfiles->count(),
                 'inventory_ready' => $rooms->where('status', 'vacant_clean')->count(),
+                'arrivals_today' => $hotelReservations->where('check_in_date', $today)->where('status', 'confirmed')->count(),
+                'departures_today' => $openFolios->filter(fn ($folio) => $folio->expected_checkout_at?->toDateString() === $today->toDateString())->count(),
+                'open_balance' => (float) $openFolios->sum('balance'),
             ],
         ]);
     }
