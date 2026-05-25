@@ -46,6 +46,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/actions/stock-adjustment', [ActionController::class, 'stockAdjustment'])->name('actions.stock-adjustment');
     Route::post('/actions/expense', [ActionController::class, 'expense'])->name('actions.expense');
     Route::post('/actions/customer', [ActionController::class, 'customer'])->name('actions.customer');
+    Route::post('/actions/credit-payment', [ActionController::class, 'creditPayment'])->name('actions.credit-payment');
     Route::post('/actions/user', [ActionController::class, 'user'])->name('actions.user');
     Route::post('/actions/settings', [ActionController::class, 'settings'])->name('actions.settings');
 });

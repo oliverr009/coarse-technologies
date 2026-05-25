@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\CreditAccount;
+use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\RestaurantTable;
@@ -60,6 +61,18 @@ class PosService
 
             if ($balance > 0 && $paymentMethod !== 'credit') {
                 throw new \RuntimeException('Payment is less than bill total. Use credit or add another payment line.');
+            }
+
+            if ($balance > 0 && $customerId) {
+                $customer = Customer::query()->findOrFail((int) $customerId);
+                $currentCreditBalance = (float) CreditAccount::query()
+                    ->where('customer_id', $customer->id)
+                    ->sum('amount');
+                $creditLimit = (float) $customer->credit_limit;
+
+                if ($creditLimit > 0 && ($currentCreditBalance + $balance) > $creditLimit) {
+                    throw new \RuntimeException("Credit limit exceeded for {$customer->name}. Current balance is KES " . number_format($currentCreditBalance, 2) . '.');
+                }
             }
 
             $approval = $this->approvals->authorizeCartChanges([

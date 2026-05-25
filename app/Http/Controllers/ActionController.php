@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\CreditAccount;
 use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\InventoryAdjustment;
@@ -367,6 +368,38 @@ class ActionController extends Controller
     {
         Customer::query()->create($request->validate(['name' => ['required'], 'phone' => ['nullable'], 'email' => ['nullable'], 'credit_limit' => ['nullable', 'numeric']]));
         return back()->with('status', 'Customer saved.');
+    }
+
+    public function creditPayment(Request $request)
+    {
+        $data = $request->validate([
+            'customer_id' => ['required', 'exists:customers,id'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'payment_method' => ['required', 'in:cash,mpesa,card,bank'],
+            'reference' => ['nullable', 'max:120'],
+            'notes' => ['nullable', 'max:1000'],
+        ]);
+
+        $customer = Customer::query()
+            ->withSum('creditAccounts as credit_balance', 'amount')
+            ->findOrFail((int) $data['customer_id']);
+        $balance = max(0, (float) ($customer->credit_balance ?? 0));
+        $amount = round((float) $data['amount'], 2);
+
+        if ($amount > $balance) {
+            return back()->withErrors(['credit_payment' => 'Collection amount is greater than the customer balance.'])->withInput();
+        }
+
+        CreditAccount::query()->create([
+            'customer_id' => $customer->id,
+            'sale_id' => null,
+            'amount' => -abs($amount),
+            'type' => 'credit',
+            'due_date' => now()->toDateString(),
+            'notes' => trim(($data['notes'] ?? '') . ' | Collection via ' . strtoupper($data['payment_method']) . ($data['reference'] ? ' ref ' . $data['reference'] : '')),
+        ]);
+
+        return back()->with('status', 'Credit collection posted.');
     }
 
     public function user(Request $request)

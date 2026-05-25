@@ -156,9 +156,38 @@ class ModuleController extends Controller
 
     public function credit()
     {
+        $customers = Customer::query()
+            ->withSum('creditAccounts as credit_balance', 'amount')
+            ->withCount('sales')
+            ->orderBy('name')
+            ->get();
+        $credits = CreditAccount::query()->with(['customer', 'sale'])->latest()->get();
+        $monthStart = now()->startOfMonth();
+        $totalOutstanding = (float) $credits->sum('amount');
+        $overdue = (float) $credits
+            ->filter(fn ($entry) => (float) $entry->amount > 0 && $entry->due_date && $entry->due_date->isPast() && ! $entry->due_date->isToday())
+            ->sum('amount');
+        $collectionsThisMonth = (float) abs($credits
+            ->filter(fn ($entry) => (float) $entry->amount < 0 && $entry->created_at >= $monthStart)
+            ->sum('amount'));
+        $nearLimit = $customers
+            ->filter(function ($customer) {
+                $limit = (float) $customer->credit_limit;
+
+                return $limit > 0 && (float) ($customer->credit_balance ?? 0) >= ($limit * 0.8);
+            })
+            ->count();
+
         return view('modules.credit', [
-            'customers' => Customer::query()->orderBy('name')->get(),
-            'credits' => CreditAccount::query()->with('customer')->latest()->get(),
+            'customers' => $customers,
+            'credits' => $credits,
+            'summary' => [
+                'customers' => $customers->count(),
+                'outstanding' => $totalOutstanding,
+                'overdue' => $overdue,
+                'collections_month' => $collectionsThisMonth,
+                'near_limit' => $nearLimit,
+            ],
         ]);
     }
 
