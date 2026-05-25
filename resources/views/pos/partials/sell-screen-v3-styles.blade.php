@@ -261,3 +261,11 @@ select.field-inp option{background:#1c2330}
 @keyframes posToastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 </style>
 
+<style>
+.pos-app-frame{height:100vh;width:100vw;display:flex;min-width:0;overflow:hidden;background:var(--bg)}
+.pos-app-frame>.dock{position:relative;z-index:50;flex:0 0 auto;height:100vh}
+.pos-terminal-main{flex:1;min-width:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.pos-terminal-main>nav,.pos-terminal-main>.bills-bar{flex-shrink:0}
+.pos-terminal-main>.shell{flex:1;min-height:0}
+@media(max-width:860px){.pos-app-frame{display:block}.pos-app-frame>.dock{display:none}.pos-terminal-main{height:100vh;width:100vw}}
+</style>
