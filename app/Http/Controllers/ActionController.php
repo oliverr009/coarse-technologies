@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Models\WastageEntry;
 use App\Services\InventoryService;
 use App\Services\Numbers;
+use App\Services\RolePermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -429,14 +430,45 @@ class ActionController extends Controller
         return back()->with('status', 'Credit collection posted.');
     }
 
-    public function user(Request $request)
+    public function user(Request $request, RolePermissionService $permissions)
     {
-        User::query()->create([...$request->validate(['name' => ['required'], 'email' => ['required', 'email', 'unique:users,email'], 'role' => ['required', 'in:admin,manager,cashier,waiter,kitchen,inventory'], 'password' => ['required']]), 'password' => Hash::make($request->input('password')), 'is_active' => true]);
+        $permissions->authorize($request->user(), 'users');
+        User::query()->create([...$request->validate(['name' => ['required'], 'email' => ['required', 'email', 'unique:users,email'], 'role' => ['required', 'in:admin,manager,cashier,waiter,kitchen,inventory'], 'password' => ['required', 'min:6']]), 'password' => Hash::make($request->input('password')), 'is_active' => true]);
         return back()->with('status', 'User saved.');
     }
 
-    public function userStatus(Request $request)
+    public function userUpdate(Request $request, RolePermissionService $permissions)
     {
+        $permissions->authorize($request->user(), 'users');
+        $data = $request->validate([
+            'user_id' => ['required', 'exists:users,id'],
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:160'],
+            'role' => ['required', 'in:admin,manager,cashier,waiter,kitchen,inventory'],
+        ]);
+
+        $user = User::query()->findOrFail((int) $data['user_id']);
+        $emailExists = User::query()
+            ->where('email', $data['email'])
+            ->whereKeyNot($user->id)
+            ->exists();
+
+        if ($emailExists) {
+            return back()->withErrors(['user_update' => 'That email address is already in use.'])->withInput();
+        }
+
+        $user->update([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'role' => $data['role'],
+        ]);
+
+        return back()->with('status', 'User details updated.');
+    }
+
+    public function userStatus(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'users');
         $data = $request->validate([
             'user_id' => ['required', 'exists:users,id'],
             'is_active' => ['required', 'boolean'],
@@ -449,23 +481,132 @@ class ActionController extends Controller
         return back()->with('status', 'User status updated.');
     }
 
-    public function settings(Request $request)
+    public function userPassword(Request $request, RolePermissionService $permissions)
     {
-        foreach (['allow_negative_inventory', 'tax_rate', 'currency', 'business_name', 'kra_pin', 'discount_approval_threshold'] as $key) {
+        $permissions->authorize($request->user(), 'users');
+        $data = $request->validate([
+            'user_id' => ['required', 'exists:users,id'],
+            'password' => ['required', 'string', 'min:6'],
+        ]);
+
+        User::query()->whereKey($data['user_id'])->update([
+            'password' => Hash::make($data['password']),
+        ]);
+
+        return back()->with('status', 'User password reset.');
+    }
+
+    public function settings(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'settings');
+        $data = $request->validate([
+            'business_name' => ['required', 'string', 'max:160'],
+            'branch_name' => ['nullable', 'string', 'max:120'],
+            'business_phone' => ['nullable', 'string', 'max:60'],
+            'business_email' => ['nullable', 'email', 'max:120'],
+            'business_address' => ['nullable', 'string', 'max:255'],
+            'kra_pin' => ['nullable', 'string', 'max:40'],
+            'currency' => ['required', 'string', 'max:12'],
+            'tax_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'service_charge_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'discount_approval_threshold' => ['required', 'numeric', 'min:0', 'max:100'],
+            'receipt_footer' => ['nullable', 'string', 'max:255'],
+            'receipt_prefix' => ['nullable', 'string', 'max:80'],
+            'default_order_type' => ['required', 'in:dine_in,takeaway,delivery'],
+            'default_guest_count' => ['required', 'integer', 'min:1', 'max:99'],
+            'manager_override_pin' => ['nullable', 'string', 'min:4', 'max:120'],
+        ]);
+
+        foreach ([
+            'business_name',
+            'branch_name',
+            'business_phone',
+            'business_email',
+            'business_address',
+            'kra_pin',
+            'currency',
+            'tax_rate',
+            'service_charge_rate',
+            'discount_approval_threshold',
+            'receipt_footer',
+            'receipt_prefix',
+            'default_order_type',
+            'default_guest_count',
+        ] as $key) {
             Setting::query()->updateOrCreate(
                 ['key' => $key],
-                ['value' => $key === 'allow_negative_inventory' ? $request->boolean($key) : $request->input($key)]
+                ['value' => $data[$key] ?? null]
+            );
+        }
+
+        foreach ([
+            'allow_negative_inventory',
+            'service_charge_enabled',
+            'void_requires_manager',
+            'refund_requires_manager',
+            'payment_cash_enabled',
+            'payment_mpesa_enabled',
+            'payment_card_enabled',
+            'payment_credit_enabled',
+            'table_required_for_dine_in',
+        ] as $booleanKey) {
+            Setting::query()->updateOrCreate(
+                ['key' => $booleanKey],
+                ['value' => $request->boolean($booleanKey)]
             );
         }
 
         if ($request->filled('manager_override_pin')) {
             Setting::query()->updateOrCreate(
                 ['key' => 'manager_override_pin'],
-                ['value' => Hash::make((string) $request->input('manager_override_pin'))]
+                ['value' => Hash::make((string) $data['manager_override_pin'])]
             );
         }
 
         return back()->with('status', 'Settings saved.');
+    }
+
+    public function printers(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'printers');
+        $data = $request->validate([
+            'receipt_printer_name' => ['required', 'string', 'max:120'],
+            'receipt_printer_connection' => ['required', 'in:browser,network,windows_shared,usb,agent'],
+            'receipt_printer_target' => ['nullable', 'string', 'max:160'],
+            'receipt_printer_paper' => ['required', 'in:80mm,58mm,A4'],
+            'receipt_printer_copies' => ['required', 'integer', 'min:1', 'max:5'],
+            'kitchen_printer_name' => ['required', 'string', 'max:120'],
+            'kitchen_printer_connection' => ['required', 'in:browser,network,windows_shared,usb,agent'],
+            'kitchen_printer_target' => ['nullable', 'string', 'max:160'],
+            'kitchen_printer_paper' => ['required', 'in:80mm,58mm,A4'],
+            'kitchen_printer_copies' => ['required', 'integer', 'min:1', 'max:5'],
+            'bar_printer_name' => ['required', 'string', 'max:120'],
+            'bar_printer_connection' => ['required', 'in:browser,network,windows_shared,usb,agent'],
+            'bar_printer_target' => ['nullable', 'string', 'max:160'],
+            'bar_printer_paper' => ['required', 'in:80mm,58mm,A4'],
+            'bar_printer_copies' => ['required', 'integer', 'min:1', 'max:5'],
+            'bar_categories_csv' => ['nullable', 'string', 'max:500'],
+            'kitchen_categories_csv' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        foreach ($data as $key => $value) {
+            Setting::query()->updateOrCreate(['key' => $key], ['value' => $value]);
+        }
+
+        foreach ([
+            'receipt_printer_auto_print',
+            'kitchen_printer_auto_print',
+            'bar_printer_auto_print',
+            'print_reprint_requires_manager',
+            'print_logo_on_receipt',
+        ] as $booleanKey) {
+            Setting::query()->updateOrCreate(
+                ['key' => $booleanKey],
+                ['value' => $request->boolean($booleanKey)]
+            );
+        }
+
+        return back()->with('status', 'Printer settings saved.');
     }
 
     public function openShift(Request $request)

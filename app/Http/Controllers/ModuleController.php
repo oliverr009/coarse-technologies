@@ -6,6 +6,8 @@ use App\Models\Category;
 use App\Models\CreditAccount;
 use App\Models\Customer;
 use App\Models\Expense;
+use App\Models\HotelRoom;
+use App\Models\HotelRoomType;
 use App\Models\InventoryAdjustment;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -24,7 +26,9 @@ use App\Models\ShiftCashEntry;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Services\RolePermissionService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ModuleController extends Controller
 {
@@ -268,14 +272,118 @@ class ModuleController extends Controller
         ]);
     }
 
-    public function users()
+    public function users(RolePermissionService $permissions)
     {
-        return view('modules.users', ['users' => User::query()->orderBy('name')->get()]);
+        $permissions->authorize(request()->user(), 'users');
+        $users = User::query()->orderBy('name')->get();
+        $roles = $permissions->roles();
+        $matrix = collect($permissions->matrix())
+            ->map(fn ($allowedRoles, $ability) => [
+                'ability' => $ability,
+                'label' => ucwords(str_replace(['_', '-'], ' ', $ability)),
+                'roles' => collect($roles)->filter(fn ($label, $role) => in_array($role, $allowedRoles, true))->keys()->values()->all(),
+            ])
+            ->values();
+
+        return view('modules.users', [
+            'users' => $users,
+            'roles' => $roles,
+            'matrix' => $matrix,
+            'summary' => [
+                'active' => $users->where('is_active', true)->count(),
+                'inactive' => $users->where('is_active', false)->count(),
+                'admins' => $users->where('role', 'admin')->count(),
+                'managers' => $users->where('role', 'manager')->count(),
+                'cashiers' => $users->where('role', 'cashier')->count(),
+                'kitchen' => $users->where('role', 'kitchen')->count(),
+            ],
+        ]);
     }
 
-    public function settings()
+    public function settings(RolePermissionService $permissions)
     {
-        return view('modules.settings', ['settings' => Setting::query()->pluck('value', 'key')]);
+        $permissions->authorize(request()->user(), 'settings');
+        $stored = Setting::query()->pluck('value', 'key');
+        $settings = collect([
+            'business_name' => 'Coarse Restaurant - Main Branch',
+            'branch_name' => 'Main Branch',
+            'business_phone' => '',
+            'business_email' => '',
+            'business_address' => '',
+            'kra_pin' => '',
+            'currency' => 'KES',
+            'tax_rate' => 16,
+            'service_charge_rate' => 10,
+            'service_charge_enabled' => true,
+            'receipt_footer' => 'Thank you for dining with us.',
+            'receipt_prefix' => 'COARSE POS',
+            'discount_approval_threshold' => 10,
+            'void_requires_manager' => true,
+            'refund_requires_manager' => true,
+            'payment_cash_enabled' => true,
+            'payment_mpesa_enabled' => true,
+            'payment_card_enabled' => true,
+            'payment_credit_enabled' => true,
+            'default_order_type' => 'dine_in',
+            'default_guest_count' => 1,
+            'allow_negative_inventory' => false,
+            'table_required_for_dine_in' => false,
+        ])->merge($stored);
+
+        return view('modules.settings', [
+            'settings' => $settings,
+            'summary' => [
+                'tax_rate' => (float) $settings['tax_rate'],
+                'service_charge_rate' => $settings['service_charge_enabled'] ? (float) $settings['service_charge_rate'] : 0,
+                'payment_methods' => collect([
+                    'cash' => $settings['payment_cash_enabled'],
+                    'mpesa' => $settings['payment_mpesa_enabled'],
+                    'card' => $settings['payment_card_enabled'],
+                    'credit' => $settings['payment_credit_enabled'],
+                ])->filter()->count(),
+                'approval_threshold' => (float) $settings['discount_approval_threshold'],
+            ],
+        ]);
+    }
+
+    public function printers(RolePermissionService $permissions)
+    {
+        $permissions->authorize(request()->user(), 'printers');
+        $stored = Setting::query()->pluck('value', 'key');
+        $settings = collect([
+            'receipt_printer_name' => 'Front Cashier Receipt Printer',
+            'receipt_printer_connection' => 'browser',
+            'receipt_printer_target' => 'This browser / cashier station',
+            'receipt_printer_paper' => '80mm',
+            'receipt_printer_auto_print' => false,
+            'receipt_printer_copies' => 1,
+            'kitchen_printer_name' => 'Main Kitchen Printer',
+            'kitchen_printer_connection' => 'browser',
+            'kitchen_printer_target' => 'Kitchen ticket browser',
+            'kitchen_printer_paper' => '80mm',
+            'kitchen_printer_auto_print' => false,
+            'kitchen_printer_copies' => 1,
+            'bar_printer_name' => 'Bar Printer',
+            'bar_printer_connection' => 'browser',
+            'bar_printer_target' => 'Bar station browser',
+            'bar_printer_paper' => '80mm',
+            'bar_printer_auto_print' => false,
+            'bar_printer_copies' => 1,
+            'bar_categories_csv' => 'Bar,Drinks,Cocktails,Mocktails,Milkshakes,Tea & Chocolate,Barista Corner',
+            'kitchen_categories_csv' => 'Mains,Sides,Breakfast,Snacks,Salads,Soups,Burgers,Sandwiches,Pizza,Desserts,Kids Menu',
+            'print_reprint_requires_manager' => true,
+            'print_logo_on_receipt' => true,
+        ])->merge($stored);
+
+        return view('modules.printers', [
+            'settings' => $settings,
+            'summary' => [
+                'auto_routes' => collect([$settings['receipt_printer_auto_print'], $settings['kitchen_printer_auto_print'], $settings['bar_printer_auto_print']])->filter()->count(),
+                'browser_routes' => collect([$settings['receipt_printer_connection'], $settings['kitchen_printer_connection'], $settings['bar_printer_connection']])->filter(fn ($value) => $value === 'browser')->count(),
+                'bar_categories' => collect(explode(',', (string) $settings['bar_categories_csv']))->filter(fn ($value) => trim($value) !== '')->count(),
+                'kitchen_categories' => collect(explode(',', (string) $settings['kitchen_categories_csv']))->filter(fn ($value) => trim($value) !== '')->count(),
+            ],
+        ]);
     }
 
     public function shifts()
@@ -306,8 +414,90 @@ class ModuleController extends Controller
         return view('modules.shifts', compact('activeShift', 'recentShifts', 'summary'));
     }
 
-    public function hotel()
+    public function hotel(RolePermissionService $permissions)
     {
-        return view('modules.hotel');
+        $permissions->authorize(request()->user(), 'hotel');
+        $reservations = Reservation::query()
+            ->with('table')
+            ->orderBy('reserved_for')
+            ->limit(14)
+            ->get();
+
+        $roomTypes = Schema::hasTable('hotel_room_types')
+            ? HotelRoomType::query()->withCount('rooms')->orderBy('name')->get()
+            : collect([
+                (object) ['name' => 'Standard King', 'code' => 'STD-K', 'base_rate' => 6200, 'max_occupancy' => 2, 'rooms_count' => 8],
+                (object) ['name' => 'Deluxe Twin', 'code' => 'DLX-T', 'base_rate' => 7800, 'max_occupancy' => 2, 'rooms_count' => 6],
+                (object) ['name' => 'Executive Suite', 'code' => 'EXE-S', 'base_rate' => 12800, 'max_occupancy' => 3, 'rooms_count' => 3],
+                (object) ['name' => 'Garden Suite', 'code' => 'GDN-S', 'base_rate' => 15400, 'max_occupancy' => 4, 'rooms_count' => 2],
+            ]);
+
+        $rooms = Schema::hasTable('hotel_rooms')
+            ? HotelRoom::query()->with('roomType')->orderBy('room_number')->get()
+            : collect([
+                (object) ['room_number' => '101', 'floor' => '1', 'status' => 'occupied', 'housekeeping_status' => 'clean', 'active_guest_name' => 'In-house Guest', 'active_folio_balance' => 12400, 'current_rate' => 6200, 'roomType' => (object) ['name' => 'Standard King']],
+                (object) ['room_number' => '102', 'floor' => '1', 'status' => 'vacant_clean', 'housekeeping_status' => 'clean', 'active_guest_name' => null, 'active_folio_balance' => 0, 'current_rate' => 6200, 'roomType' => (object) ['name' => 'Standard King']],
+                (object) ['room_number' => '201', 'floor' => '2', 'status' => 'reserved', 'housekeeping_status' => 'inspected', 'active_guest_name' => 'Late Arrival', 'active_folio_balance' => 28500, 'current_rate' => 12800, 'roomType' => (object) ['name' => 'Executive Suite']],
+                (object) ['room_number' => '202', 'floor' => '2', 'status' => 'dirty', 'housekeeping_status' => 'dirty', 'active_guest_name' => null, 'active_folio_balance' => 0, 'current_rate' => 7800, 'roomType' => (object) ['name' => 'Deluxe Twin']],
+                (object) ['room_number' => '301', 'floor' => '3', 'status' => 'occupied', 'housekeeping_status' => 'clean', 'active_guest_name' => 'Walk-in Guest', 'active_folio_balance' => 19800, 'current_rate' => 15400, 'roomType' => (object) ['name' => 'Garden Suite']],
+                (object) ['room_number' => '302', 'floor' => '3', 'status' => 'out_of_order', 'housekeeping_status' => 'out_of_order', 'active_guest_name' => null, 'active_folio_balance' => 0, 'current_rate' => 0, 'roomType' => (object) ['name' => 'Garden Suite']],
+            ]);
+
+        $guestProfiles = Customer::query()
+            ->orderByDesc('updated_at')
+            ->limit(10)
+            ->get()
+            ->map(function ($customer) use ($reservations) {
+                $reservationCount = $reservations->where('customer_phone', $customer->phone)->count();
+
+                return (object) [
+                    'name' => $customer->name,
+                    'phone' => $customer->phone,
+                    'email' => $customer->email,
+                    'profile_source' => 'Customer profile',
+                    'activity_hint' => $reservationCount ? $reservationCount . ' linked reservation(s)' : 'Ready for stay history',
+                ];
+            });
+
+        $reservationGuests = $reservations
+            ->groupBy(fn ($reservation) => trim(strtolower(($reservation->customer_name ?? '') . '|' . ($reservation->customer_phone ?? ''))))
+            ->filter(fn ($rows, $key) => $key !== '|')
+            ->map(function ($rows) {
+                $reservation = $rows->first();
+
+                return (object) [
+                    'name' => $reservation->customer_name ?: 'Unnamed guest',
+                    'phone' => $reservation->customer_phone,
+                    'email' => null,
+                    'profile_source' => 'Reservation feed',
+                    'activity_hint' => $rows->count() . ' reservation(s) on record',
+                ];
+            })
+            ->values();
+
+        $guestProfiles = $guestProfiles
+            ->concat($reservationGuests)
+            ->unique(fn ($guest) => trim(strtolower(($guest->name ?? '') . '|' . ($guest->phone ?? ''))))
+            ->take(12)
+            ->values();
+
+        return view('modules.hotel', [
+            'roomTypes' => $roomTypes,
+            'rooms' => $rooms,
+            'guestProfiles' => $guestProfiles,
+            'reservations' => $reservations,
+            'summary' => [
+                'occupied' => $rooms->where('status', 'occupied')->count(),
+                'reserved' => $rooms->where('status', 'reserved')->count(),
+                'vacant_clean' => $rooms->where('status', 'vacant_clean')->count(),
+                'dirty' => $rooms->where('status', 'dirty')->count(),
+                'out_of_order' => $rooms->where('status', 'out_of_order')->count(),
+                'folios' => $rooms->filter(fn ($room) => (float) ($room->active_folio_balance ?? 0) > 0)->count(),
+                'reservation_feed' => $reservations->count(),
+                'room_types' => $roomTypes->count(),
+                'guest_profiles' => $guestProfiles->count(),
+                'inventory_ready' => $rooms->where('status', 'vacant_clean')->count(),
+            ],
+        ]);
     }
 }

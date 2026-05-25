@@ -34,6 +34,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/shifts', [ModuleController::class, 'shifts'])->name('shifts');
     Route::get('/hotel', [ModuleController::class, 'hotel'])->name('hotel');
     Route::get('/users', [ModuleController::class, 'users'])->name('users');
+    Route::get('/printers', [ModuleController::class, 'printers'])->name('printers');
     Route::get('/settings', [ModuleController::class, 'settings'])->name('settings');
 
     Route::post('/actions/product', [ActionController::class, 'product'])->name('actions.product');
@@ -50,9 +51,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/actions/customer', [ActionController::class, 'customer'])->name('actions.customer');
     Route::post('/actions/credit-payment', [ActionController::class, 'creditPayment'])->name('actions.credit-payment');
     Route::post('/actions/user', [ActionController::class, 'user'])->name('actions.user');
+    Route::post('/actions/user-update', [ActionController::class, 'userUpdate'])->name('actions.user-update');
     Route::post('/actions/user-status', [ActionController::class, 'userStatus'])->name('actions.user-status');
+    Route::post('/actions/user-password', [ActionController::class, 'userPassword'])->name('actions.user-password');
     Route::post('/actions/shifts/open', [ActionController::class, 'openShift'])->name('actions.shifts.open');
     Route::post('/actions/shifts/entry', [ActionController::class, 'shiftCashEntry'])->name('actions.shifts.entry');
     Route::post('/actions/shifts/close', [ActionController::class, 'closeShift'])->name('actions.shifts.close');
+    Route::post('/actions/printers', [ActionController::class, 'printers'])->name('actions.printers');
     Route::post('/actions/settings', [ActionController::class, 'settings'])->name('actions.settings');
 });
