@@ -73,6 +73,15 @@
                     <td>{{ $adjustment->approver?->name ?? (($adjustment->meta['approval_source'] ?? null) === 'settings_override_pin' ? 'Override PIN' : '-') }}</td>
                     <td>{{ $adjustment->reason }}</td>
                 </tr>
+                @if($adjustment->adjustment_type === 'return_items' && $adjustment->items->isNotEmpty())
+                    <tr>
+                        <td colspan="7" style="color:var(--text3)">
+                            @foreach($adjustment->items as $line)
+                                <div>{{ number_format($line->quantity, 2) }} × {{ $line->product_name }} · KES {{ number_format($line->line_total, 2) }} @if($line->restocked)<strong style="color:var(--green)">restocked</strong>@else<em style="font-style:normal;color:var(--gold)">not restocked</em>@endif</div>
+                            @endforeach
+                        </td>
+                    </tr>
+                @endif
             @empty
                 <tr><td colspan="7" style="color:var(--text3)">No refunds or voids recorded yet.</td></tr>
             @endforelse

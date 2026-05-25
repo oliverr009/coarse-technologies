@@ -58,6 +58,17 @@ class Sale extends Model
         return $this->hasMany(SaleAdjustment::class);
     }
 
+    public function returnedItemsQuantity(int $saleItemId): float
+    {
+        return (float) $this->adjustments()
+            ->where('adjustment_type', 'return_items')
+            ->with('items')
+            ->get()
+            ->flatMap->items
+            ->where('sale_item_id', $saleItemId)
+            ->sum('quantity');
+    }
+
     public function table(): BelongsTo
     {
         return $this->belongsTo(RestaurantTable::class, 'restaurant_table_id');

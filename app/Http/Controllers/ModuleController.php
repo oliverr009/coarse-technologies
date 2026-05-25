@@ -112,7 +112,7 @@ class ModuleController extends Controller
                 ->get(),
             'expenses' => Expense::query()->sum('amount'),
             'auditLogs' => PosAuditLog::query()->with(['actor', 'approver', 'order', 'sale'])->latest()->limit(20)->get(),
-            'saleAdjustments' => SaleAdjustment::query()->with(['sale', 'actor', 'approver'])->latest()->limit(20)->get(),
+            'saleAdjustments' => SaleAdjustment::query()->with(['sale', 'actor', 'approver', 'items'])->latest()->limit(20)->get(),
         ]);
     }
 

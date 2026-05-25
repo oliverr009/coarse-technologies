@@ -181,7 +181,7 @@ class PosController extends Controller
     public function receipt(Sale $sale)
     {
         return view('pos.receipt', [
-            'sale' => $sale->load(['items', 'payments', 'table', 'customer', 'cashier', 'adjustments.actor', 'adjustments.approver']),
+            'sale' => $sale->load(['items', 'payments', 'table', 'customer', 'cashier', 'adjustments.actor', 'adjustments.approver', 'adjustments.items']),
         ]);
     }
 
@@ -219,5 +219,41 @@ class PosController extends Controller
         }
 
         return redirect()->route('pos.receipt', $sale)->with('status', "Refund recorded: {$sale->sale_number}");
+    }
+
+    public function returnItems(Request $request, Sale $sale, SaleAdjustmentService $adjustments)
+    {
+        $data = $request->validate([
+            'return_qty' => ['array'],
+            'return_qty.*' => ['nullable', 'numeric', 'min:0'],
+            'restock' => ['array'],
+            'line_note' => ['array'],
+            'line_note.*' => ['nullable', 'string', 'max:255'],
+            'refund_method' => ['nullable', 'in:cash,mpesa,card,credit_adjustment,bank'],
+            'reason' => ['required', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'manager_pin' => ['required', 'string', 'max:120'],
+        ]);
+
+        $lines = collect($request->input('return_qty', []))
+            ->map(function ($qty, $saleItemId) use ($request) {
+                return [
+                    'sale_item_id' => (int) $saleItemId,
+                    'qty' => (float) $qty,
+                    'restock' => in_array((string) $saleItemId, array_map('strval', array_keys($request->input('restock', []))), true),
+                    'notes' => $request->input("line_note.{$saleItemId}"),
+                ];
+            })
+            ->filter(fn ($line) => $line['qty'] > 0)
+            ->values()
+            ->all();
+
+        try {
+            $adjustments->returnItems($sale, $data + ['lines' => $lines], $request->user()->id);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['receipt' => $e->getMessage()]);
+        }
+
+        return redirect()->route('pos.receipt', $sale)->with('status', "Item return recorded: {$sale->sale_number}");
     }
 }

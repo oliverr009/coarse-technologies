@@ -3,7 +3,13 @@
 @php
     $changeDue = max(0, (float) $sale->amount_paid - (float) $sale->total_amount);
     $balanceDue = max(0, (float) $sale->balance_due);
-    $refundedAmount = (float) $sale->adjustments->where('adjustment_type', 'refund_sale')->sum('amount');
+    $refundAdjustments = $sale->adjustments->whereIn('adjustment_type', ['refund_sale', 'return_items']);
+    $refundedAmount = (float) $refundAdjustments->sum('amount');
+    $returnedQtyBySaleItem = $sale->adjustments
+        ->where('adjustment_type', 'return_items')
+        ->flatMap->items
+        ->groupBy('sale_item_id')
+        ->map(fn ($items) => (float) $items->sum('quantity'));
 @endphp
 
 @section('content')
@@ -42,9 +48,17 @@
             </thead>
             <tbody>
                 @foreach($sale->items as $item)
+                    @php
+                        $alreadyReturned = (float) ($returnedQtyBySaleItem[$item->id] ?? 0);
+                        $remainingQty = max(0, (float) $item->quantity - $alreadyReturned);
+                    @endphp
                     <tr>
                         <td>
                             <strong>{{ $item->product_name }}</strong>
+                            <div class="receipt-muted">Remaining eligible qty: {{ number_format($remainingQty, 2) }}</div>
+                            @if($alreadyReturned > 0)
+                                <div class="receipt-muted" style="color:var(--gold)">Previously returned: {{ number_format($alreadyReturned, 2) }}</div>
+                            @endif
                             @if($item->notes)<div class="receipt-muted">{{ $item->notes }}</div>@endif
                         </td>
                         <td>{{ number_format($item->quantity, 2) }}</td>
@@ -77,6 +91,66 @@
             @empty
                 <div class="receipt-muted">No payment line recorded. Balance is on customer credit.</div>
             @endforelse
+        </div>
+
+        <div class="card print-hide" style="margin-top:18px">
+            <div class="sec-head"><span class="sec-title">Item-Level Returns</span></div>
+            <form method="post" action="{{ route('pos.return-items', $sale) }}">
+                @csrf
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Available</th>
+                            <th>Return Qty</th>
+                            <th>Restock</th>
+                            <th>Line Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($sale->items as $item)
+                            @php
+                                $alreadyReturned = (float) ($returnedQtyBySaleItem[$item->id] ?? 0);
+                                $remainingQty = max(0, (float) $item->quantity - $alreadyReturned);
+                            @endphp
+                            <tr>
+                                <td>{{ $item->product_name }}</td>
+                                <td>{{ number_format($remainingQty, 2) }}</td>
+                                <td><input class="inp" type="number" step="0.01" min="0" max="{{ number_format($remainingQty, 2, '.', '') }}" name="return_qty[{{ $item->id }}]" value=""></td>
+                                <td><label><input type="checkbox" name="restock[{{ $item->id }}]" value="1"> Yes</label></td>
+                                <td><input class="inp" name="line_note[{{ $item->id }}]" placeholder="Why is this item coming back?"></td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+                <div class="grid-3 print-hide" style="margin-top:14px">
+                    <div>
+                        <div class="lbl">Refund Method</div>
+                        <select class="inp" name="refund_method">
+                            <option value="cash">Cash</option>
+                            <option value="mpesa">M-Pesa</option>
+                            <option value="card">Card</option>
+                            <option value="credit_adjustment">Credit Adjustment</option>
+                            <option value="bank">Bank</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="lbl">Return Reason</div>
+                        <input class="inp" name="reason" placeholder="Customer returned selected items" required>
+                    </div>
+                    <div>
+                        <div class="lbl">Manager Approval</div>
+                        <input class="inp" name="manager_pin" type="password" placeholder="Manager PIN or password" required>
+                    </div>
+                </div>
+                <div style="margin-top:10px">
+                    <div class="lbl">Notes</div>
+                    <textarea class="inp" name="notes" rows="2" placeholder="Extra return notes or service context"></textarea>
+                </div>
+                <div class="receipt-actions print-hide" style="margin-top:12px">
+                    <button class="btn btn-primary" {{ $sale->status === 'voided' ? 'disabled' : '' }}>Record Item Return</button>
+                </div>
+            </form>
         </div>
 
         <div class="card print-hide" style="margin-top:18px">
@@ -121,11 +195,20 @@
                     @forelse($sale->adjustments as $adjustment)
                         <tr>
                             <td>{{ $adjustment->created_at?->format('d M H:i') }}</td>
-                            <td><span class="badge {{ $adjustment->adjustment_type === 'void_sale' ? 'b-red' : 'b-gold' }}">{{ str_replace('_', ' ', $adjustment->adjustment_type) }}</span></td>
+                            <td><span class="badge {{ $adjustment->adjustment_type === 'void_sale' ? 'b-red' : ($adjustment->adjustment_type === 'return_items' ? 'b-blue' : 'b-gold') }}">{{ str_replace('_', ' ', $adjustment->adjustment_type) }}</span></td>
                             <td>KES {{ number_format($adjustment->amount, 2) }}</td>
                             <td>{{ $adjustment->reason }}</td>
                             <td>{{ $adjustment->approver?->name ?? (($adjustment->meta['approval_source'] ?? null) === 'settings_override_pin' ? 'Override PIN' : '-') }}</td>
                         </tr>
+                        @if($adjustment->adjustment_type === 'return_items' && $adjustment->items->isNotEmpty())
+                            <tr>
+                                <td colspan="5" style="color:var(--text3)">
+                                    @foreach($adjustment->items as $line)
+                                        <div>{{ number_format($line->quantity, 2) }} × {{ $line->product_name }} @if($line->restocked)<strong style="color:var(--green)">restocked</strong>@else<em style="font-style:normal;color:var(--gold)">not restocked</em>@endif</div>
+                                    @endforeach
+                                </td>
+                            </tr>
+                        @endif
                     @empty
                         <tr><td colspan="5" style="color:var(--text3)">No sale adjustments recorded yet.</td></tr>
                     @endforelse
