@@ -11,6 +11,7 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductionRun;
 use App\Models\Purchase;
+use App\Models\Reservation;
 use App\Models\RestaurantTable;
 use App\Models\Setting;
 use App\Models\Supplier;
@@ -188,6 +189,30 @@ class ActionController extends Controller
         RestaurantTable::query()->whereKey($data['table_id'])->update(['status' => $data['status']]);
 
         return back()->with('status', 'Table marked ' . str_replace('_', ' ', $data['status']) . '.');
+    }
+
+    public function reservation(Request $request)
+    {
+        $data = $request->validate([
+            'restaurant_table_id' => ['nullable', 'exists:restaurant_tables,id'],
+            'customer_name' => ['required', 'max:120'],
+            'customer_phone' => ['nullable', 'max:80'],
+            'covers' => ['required', 'integer', 'min:1', 'max:50'],
+            'reserved_for' => ['required', 'date'],
+            'notes' => ['nullable', 'max:1000'],
+        ]);
+
+        Reservation::query()->create([
+            ...$data,
+            'status' => 'booked',
+            'created_by' => $request->user()->id,
+        ]);
+
+        if (! empty($data['restaurant_table_id'])) {
+            RestaurantTable::query()->whereKey($data['restaurant_table_id'])->update(['status' => 'reserved']);
+        }
+
+        return back()->with('status', 'Reservation saved.');
     }
 
     public function kds(Request $request)

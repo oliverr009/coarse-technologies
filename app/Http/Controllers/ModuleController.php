@@ -14,7 +14,9 @@ use App\Models\Product;
 use App\Models\ProductionRun;
 use App\Models\Purchase;
 use App\Models\Recipe;
+use App\Models\Reservation;
 use App\Models\RestaurantTable;
+use App\Models\Sale;
 use App\Models\SaleAdjustment;
 use App\Models\Setting;
 use App\Models\StockMovement;
@@ -66,11 +68,27 @@ class ModuleController extends Controller
 
     public function tables()
     {
+        $tables = RestaurantTable::query()
+            ->with(['orders' => fn ($query) => $query->with('items')->whereIn('status', ['held', 'sent'])->latest()])
+            ->orderBy('name')
+            ->get();
+
+        $reservations = Reservation::query()
+            ->with('table')
+            ->whereIn('status', ['booked', 'arrived'])
+            ->orderBy('reserved_for')
+            ->limit(20)
+            ->get();
+
         return view('modules.tables', [
-            'tables' => RestaurantTable::query()
-                ->with(['orders' => fn ($query) => $query->with('items')->whereIn('status', ['held', 'sent'])->latest()])
-                ->orderBy('name')
-                ->get(),
+            'tables' => $tables,
+            'reservations' => $reservations,
+            'summary' => [
+                'available' => $tables->where('status', 'available')->count(),
+                'occupied' => $tables->where('status', 'occupied')->count(),
+                'reserved' => $tables->where('status', 'reserved')->count(),
+                'needs_cleaning' => $tables->where('status', 'needs_cleaning')->count(),
+            ],
         ]);
     }
 
@@ -193,6 +211,16 @@ class ModuleController extends Controller
 
     public function reports()
     {
+        $today = now()->startOfDay();
+        $salesToday = Sale::query()->where('created_at', '>=', $today)->get();
+        $liveOrders = Order::query()->with(['table', 'customer'])->whereIn('status', ['held', 'sent', 'ready'])->latest()->limit(12)->get();
+        $tables = RestaurantTable::query()->get();
+        $reservationsToday = Reservation::query()->with('table')->whereDate('reserved_for', today())->orderBy('reserved_for')->limit(12)->get();
+        $trackedProducts = Product::query()
+            ->withSum('stockLevels as stock_qty', 'quantity')
+            ->whereIn('product_type', ['raw_material', 'resale_item', 'semi_finished'])
+            ->get();
+
         return view('modules.reports', [
             'movements' => StockMovement::query()->with('product')->latest()->limit(80)->get(),
             'consumption' => StockMovement::query()
@@ -206,6 +234,29 @@ class ModuleController extends Controller
             'auditLogs' => PosAuditLog::query()->with(['actor', 'approver', 'order', 'sale'])->latest()->limit(20)->get(),
             'saleAdjustments' => SaleAdjustment::query()->with(['sale', 'actor', 'approver', 'items'])->latest()->limit(20)->get(),
             'inventoryAdjustments' => InventoryAdjustment::query()->with(['product', 'actor'])->latest()->limit(20)->get(),
+            'opsSummary' => [
+                'sales_today_count' => $salesToday->count(),
+                'sales_today_value' => (float) $salesToday->sum('total_amount'),
+                'live_orders' => $liveOrders->count(),
+                'kitchen_pending' => OrderItem::query()->whereIn('kitchen_status', ['pending', 'preparing'])->count(),
+                'tables_occupied' => $tables->where('status', 'occupied')->count(),
+                'tables_cleaning' => $tables->where('status', 'needs_cleaning')->count(),
+                'reservations_today' => $reservationsToday->count(),
+                'stock_alerts' => $trackedProducts->filter(fn ($product) => (float) ($product->stock_qty ?? 0) <= (float) $product->reorder_level)->count(),
+            ],
+            'liveOrders' => $liveOrders,
+            'tableSummary' => [
+                'available' => $tables->where('status', 'available')->count(),
+                'occupied' => $tables->where('status', 'occupied')->count(),
+                'reserved' => $tables->where('status', 'reserved')->count(),
+                'needs_cleaning' => $tables->where('status', 'needs_cleaning')->count(),
+            ],
+            'reservationsToday' => $reservationsToday,
+            'stockAlerts' => $trackedProducts
+                ->filter(fn ($product) => (float) ($product->stock_qty ?? 0) <= (float) $product->reorder_level)
+                ->sortBy('stock_qty')
+                ->take(12)
+                ->values(),
         ]);
     }
 

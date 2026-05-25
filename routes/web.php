@@ -39,6 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/actions/recipe', [ActionController::class, 'recipe'])->name('actions.recipe');
     Route::post('/actions/production', [ActionController::class, 'production'])->name('actions.production');
     Route::post('/actions/table', [ActionController::class, 'table'])->name('actions.table');
+    Route::post('/actions/reservation', [ActionController::class, 'reservation'])->name('actions.reservation');
     Route::post('/actions/kds', [ActionController::class, 'kds'])->name('actions.kds');
     Route::post('/actions/purchase', [ActionController::class, 'purchase'])->name('actions.purchase');
     Route::post('/actions/supplier', [ActionController::class, 'supplier'])->name('actions.supplier');
