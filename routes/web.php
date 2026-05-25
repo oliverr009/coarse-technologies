@@ -37,10 +37,13 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/actions/product', [ActionController::class, 'product'])->name('actions.product');
     Route::post('/actions/recipe', [ActionController::class, 'recipe'])->name('actions.recipe');
+    Route::post('/actions/production', [ActionController::class, 'production'])->name('actions.production');
     Route::post('/actions/table', [ActionController::class, 'table'])->name('actions.table');
     Route::post('/actions/kds', [ActionController::class, 'kds'])->name('actions.kds');
     Route::post('/actions/purchase', [ActionController::class, 'purchase'])->name('actions.purchase');
+    Route::post('/actions/supplier', [ActionController::class, 'supplier'])->name('actions.supplier');
     Route::post('/actions/wastage', [ActionController::class, 'wastage'])->name('actions.wastage');
+    Route::post('/actions/stock-adjustment', [ActionController::class, 'stockAdjustment'])->name('actions.stock-adjustment');
     Route::post('/actions/expense', [ActionController::class, 'expense'])->name('actions.expense');
     Route::post('/actions/customer', [ActionController::class, 'customer'])->name('actions.customer');
     Route::post('/actions/user', [ActionController::class, 'user'])->name('actions.user');

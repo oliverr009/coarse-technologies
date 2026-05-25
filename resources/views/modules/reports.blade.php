@@ -49,6 +49,38 @@
 </div>
 
 <div class="card" style="margin-top:16px">
+    <div class="sec-head"><span class="sec-title">Inventory Adjustments</span></div>
+    <table>
+        <thead>
+            <tr>
+                <th>When</th>
+                <th>Product</th>
+                <th>Reason</th>
+                <th>Expected</th>
+                <th>Counted</th>
+                <th>Variance</th>
+                <th>Actor</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse($inventoryAdjustments as $adjustment)
+                <tr>
+                    <td>{{ $adjustment->created_at?->format('d M H:i') }}</td>
+                    <td>{{ $adjustment->product?->name ?? '-' }}</td>
+                    <td><span class="badge b-gold">{{ str_replace('_', ' ', $adjustment->reason) }}</span></td>
+                    <td>{{ number_format($adjustment->expected_qty, 2) }}</td>
+                    <td>{{ number_format($adjustment->counted_qty, 2) }}</td>
+                    <td style="color:{{ $adjustment->variance_qty >= 0 ? 'var(--green)' : 'var(--red)' }}">{{ $adjustment->variance_qty >= 0 ? '+' : '' }}{{ number_format($adjustment->variance_qty, 2) }}</td>
+                    <td>{{ $adjustment->actor?->name ?? '-' }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="7" style="color:var(--text3)">No inventory adjustments recorded yet.</td></tr>
+            @endforelse
+        </tbody>
+    </table>
+</div>
+
+<div class="card" style="margin-top:16px">
     <div class="sec-head"><span class="sec-title">Refunds & Voids</span></div>
     <table>
         <thead>
@@ -77,7 +109,7 @@
                     <tr>
                         <td colspan="7" style="color:var(--text3)">
                             @foreach($adjustment->items as $line)
-                                <div>{{ number_format($line->quantity, 2) }} × {{ $line->product_name }} · KES {{ number_format($line->line_total, 2) }} @if($line->restocked)<strong style="color:var(--green)">restocked</strong>@else<em style="font-style:normal;color:var(--gold)">not restocked</em>@endif</div>
+                                <div>{{ number_format($line->quantity, 2) }} × {{ $line->product_name }} · {{ number_format($line->line_total, 2) }} KES @if($line->restocked)<strong style="color:var(--green)">restocked</strong>@else<em style="font-style:normal;color:var(--gold)">not restocked</em>@endif</div>
                             @endforeach
                         </td>
                     </tr>

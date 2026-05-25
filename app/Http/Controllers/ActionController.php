@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Expense;
+use App\Models\InventoryAdjustment;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\ProductionRun;
 use App\Models\Purchase;
 use App\Models\RestaurantTable;
 use App\Models\Setting;
@@ -97,6 +99,84 @@ class ActionController extends Controller
         return back()->with('status', 'Recipe activated.');
     }
 
+    public function production(Request $request, InventoryService $inventory)
+    {
+        $data = $request->validate([
+            'recipe_id' => ['required', 'exists:recipes,id'],
+            'planned_quantity' => ['required', 'numeric', 'gt:0'],
+            'notes' => ['nullable', 'max:1000'],
+        ]);
+
+        try {
+            DB::transaction(function () use ($data, $request, $inventory) {
+                $recipe = \App\Models\Recipe::query()
+                    ->with(['product', 'items.ingredient'])
+                    ->findOrFail((int) $data['recipe_id']);
+
+                if ($recipe->status !== 'active') {
+                    throw new \RuntimeException('Only active recipes can be produced.');
+                }
+
+                if ($recipe->items->isEmpty()) {
+                    throw new \RuntimeException('This recipe has no ingredients yet.');
+                }
+
+                $plannedQty = (float) $data['planned_quantity'];
+                $yieldQty = (float) $recipe->yield_quantity;
+                $ratio = $plannedQty / $yieldQty;
+
+                $run = ProductionRun::query()->create([
+                    'recipe_id' => $recipe->id,
+                    'product_id' => $recipe->product_id,
+                    'outlet_id' => 1,
+                    'planned_quantity' => $plannedQty,
+                    'yield_quantity' => $yieldQty,
+                    'notes' => $data['notes'] ?? null,
+                    'created_by' => $request->user()->id,
+                    'meta' => [
+                        'yield_unit' => $recipe->yield_unit,
+                    ],
+                ]);
+
+                foreach ($recipe->items as $item) {
+                    $ingredientQty = round((float) $item->quantity_required * $ratio, 4);
+
+                    if ($ingredientQty <= 0) {
+                        continue;
+                    }
+
+                    $inventory->move(
+                        (int) $item->ingredient_product_id,
+                        1,
+                        -abs($ingredientQty),
+                        'PRODUCTION_OUT',
+                        ProductionRun::class,
+                        $run->id,
+                        $request->user()->id,
+                        $item->ingredient?->cost_price ? (float) $item->ingredient->cost_price : null,
+                        'Production issue for ' . ($recipe->product->name ?? 'recipe output')
+                    );
+                }
+
+                $inventory->move(
+                    (int) $recipe->product_id,
+                    1,
+                    $plannedQty,
+                    'PRODUCTION_IN',
+                    ProductionRun::class,
+                    $run->id,
+                    $request->user()->id,
+                    $recipe->product?->cost_price ? (float) $recipe->product->cost_price : null,
+                    'Production output for ' . ($recipe->product->name ?? 'recipe output')
+                );
+            });
+        } catch (\Throwable $e) {
+            return back()->withErrors(['production' => $e->getMessage()])->withInput();
+        }
+
+        return back()->with('status', 'Production run posted.');
+    }
+
     public function table(Request $request)
     {
         $data = $request->validate([
@@ -142,52 +222,71 @@ class ActionController extends Controller
 
         try {
             DB::transaction(function () use ($request, $inventory, $data) {
-            $supplierId = $data['supplier_id'] ?? null;
-            if (! $supplierId && ! empty($data['supplier_name'])) {
-                $supplierId = Supplier::query()->firstOrCreate([
-                    'name' => trim($data['supplier_name']),
-                ], [
-                    'phone' => $data['supplier_phone'] ?? null,
-                    'email' => $data['supplier_email'] ?? null,
-                ])->id;
-            }
-
-            $purchase = Purchase::query()->create([
-                'purchase_number' => Numbers::next('PUR', 'purchases', 'purchase_number'),
-                'supplier_id' => $supplierId,
-                'outlet_id' => 1,
-                'total_amount' => 0,
-                'notes' => $data['notes'] ?? null,
-                'created_by' => $request->user()->id,
-            ]);
-
-            $total = 0;
-            foreach ($data['product_id'] as $i => $productId) {
-                if (! $productId) {
-                    continue;
+                $supplierId = $data['supplier_id'] ?? null;
+                if (! $supplierId && ! empty($data['supplier_name'])) {
+                    $supplierId = Supplier::query()->firstOrCreate([
+                        'name' => trim($data['supplier_name']),
+                    ], [
+                        'phone' => $data['supplier_phone'] ?? null,
+                        'email' => $data['supplier_email'] ?? null,
+                    ])->id;
                 }
-                $qty = (float) ($data['quantity'][$i] ?? 0);
-                $cost = (float) ($data['unit_cost'][$i] ?? 0);
-                if ($qty <= 0) {
-                    continue;
+
+                $purchase = Purchase::query()->create([
+                    'purchase_number' => Numbers::next('PUR', 'purchases', 'purchase_number'),
+                    'supplier_id' => $supplierId,
+                    'outlet_id' => 1,
+                    'total_amount' => 0,
+                    'notes' => $data['notes'] ?? null,
+                    'created_by' => $request->user()->id,
+                ]);
+
+                $total = 0;
+                foreach ($data['product_id'] as $i => $productId) {
+                    if (! $productId) {
+                        continue;
+                    }
+                    $qty = (float) ($data['quantity'][$i] ?? 0);
+                    $cost = (float) ($data['unit_cost'][$i] ?? 0);
+                    if ($qty <= 0) {
+                        continue;
+                    }
+                    $line = $qty * $cost;
+                    $total += $line;
+                    $purchase->items()->create(['product_id' => $productId, 'quantity' => $qty, 'unit_cost' => $cost, 'line_total' => $line]);
+                    $inventory->move((int) $productId, 1, $qty, 'PURCHASE', Purchase::class, $purchase->id, $request->user()->id, $cost, 'Purchase stock-in');
                 }
-                $line = $qty * $cost;
-                $total += $line;
-                $purchase->items()->create(['product_id' => $productId, 'quantity' => $qty, 'unit_cost' => $cost, 'line_total' => $line]);
-                $inventory->move((int) $productId, 1, $qty, 'PURCHASE', Purchase::class, $purchase->id, $request->user()->id, $cost, 'Purchase stock-in');
-            }
 
-            if ($total <= 0) {
-                throw new \RuntimeException('Add at least one purchase line with quantity greater than zero.');
-            }
+                if ($total <= 0) {
+                    throw new \RuntimeException('Add at least one purchase line with quantity greater than zero.');
+                }
 
-            $purchase->update(['total_amount' => $total]);
+                $purchase->update(['total_amount' => $total]);
             });
         } catch (\Throwable $e) {
             return back()->withErrors(['purchase' => $e->getMessage()])->withInput();
         }
 
         return back()->with('status', 'Purchase posted.');
+    }
+
+    public function supplier(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'max:120'],
+            'phone' => ['nullable', 'max:80'],
+            'email' => ['nullable', 'email', 'max:120'],
+        ]);
+
+        Supplier::query()->updateOrCreate(
+            ['name' => trim($data['name'])],
+            [
+                'phone' => $data['phone'] ?? null,
+                'email' => $data['email'] ?? null,
+            ]
+        );
+
+        return back()->with('status', 'Supplier saved.');
     }
 
     public function wastage(Request $request, InventoryService $inventory)
@@ -199,6 +298,63 @@ class ActionController extends Controller
         });
 
         return back()->with('status', 'Wastage recorded.');
+    }
+
+    public function stockAdjustment(Request $request, InventoryService $inventory)
+    {
+        $data = $request->validate([
+            'product_id' => ['required', 'exists:products,id'],
+            'counted_qty' => ['required', 'numeric', 'min:0'],
+            'reason' => ['required', 'in:cycle_count,opening_balance,damage,variance,transfer_in,transfer_out,production_correction'],
+            'notes' => ['nullable', 'max:1000'],
+        ]);
+
+        try {
+            DB::transaction(function () use ($data, $request, $inventory) {
+                $product = Product::query()
+                    ->withSum('stockLevels as stock_qty', 'quantity')
+                    ->findOrFail((int) $data['product_id']);
+
+                $expectedQty = (float) ($product->stock_qty ?? 0);
+                $countedQty = (float) $data['counted_qty'];
+                $varianceQty = round($countedQty - $expectedQty, 4);
+
+                if (abs($varianceQty) < 0.0001) {
+                    throw new \RuntimeException('Count matches current stock. No adjustment was needed.');
+                }
+
+                $adjustment = InventoryAdjustment::query()->create([
+                    'product_id' => $product->id,
+                    'outlet_id' => 1,
+                    'expected_qty' => $expectedQty,
+                    'counted_qty' => $countedQty,
+                    'variance_qty' => $varianceQty,
+                    'unit_cost' => $product->cost_price,
+                    'reason' => $data['reason'],
+                    'notes' => $data['notes'] ?? null,
+                    'created_by' => $request->user()->id,
+                    'meta' => [
+                        'source' => 'inventory_module',
+                    ],
+                ]);
+
+                $inventory->move(
+                    (int) $product->id,
+                    1,
+                    $varianceQty,
+                    'ADJUSTMENT',
+                    InventoryAdjustment::class,
+                    $adjustment->id,
+                    $request->user()->id,
+                    $product->cost_price ? (float) $product->cost_price : null,
+                    trim(($data['notes'] ?? '') . ' | Count reason: ' . str_replace('_', ' ', $data['reason']))
+                );
+            });
+        } catch (\Throwable $e) {
+            return back()->withErrors(['stock_adjustment' => $e->getMessage()])->withInput();
+        }
+
+        return back()->with('status', 'Stock adjustment posted.');
     }
 
     public function expense(Request $request)
