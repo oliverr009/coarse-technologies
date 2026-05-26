@@ -9,6 +9,7 @@ use App\Models\Expense;
 use App\Models\HotelFolio;
 use App\Models\HotelReservation;
 use App\Models\HotelRoom;
+use App\Models\HotelRoomType;
 use App\Models\InventoryAdjustment;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -907,5 +908,61 @@ class ActionController extends Controller
         ]);
 
         return back()->with('status', 'Room status updated.');
+    }
+
+    public function hotelRoomType(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'hotel');
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'code' => ['nullable', 'string', 'max:40'],
+            'base_rate' => ['required', 'numeric', 'min:0'],
+            'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        HotelRoomType::query()->updateOrCreate(
+            ['code' => $data['code'] ?: str($data['name'])->slug('-')->upper()->toString()],
+            [
+                'name' => $data['name'],
+                'description' => $data['description'] ?? null,
+                'base_rate' => $data['base_rate'],
+                'max_occupancy' => $data['max_occupancy'],
+                'is_active' => true,
+            ]
+        );
+
+        return back()->with('status', 'Room type and rate saved.');
+    }
+
+    public function hotelRoom(Request $request, RolePermissionService $permissions)
+    {
+        $permissions->authorize($request->user(), 'hotel');
+        $data = $request->validate([
+            'room_type_id' => ['required', 'exists:hotel_room_types,id'],
+            'room_number' => ['required', 'string', 'max:40'],
+            'floor' => ['nullable', 'string', 'max:40'],
+            'status' => ['required', 'in:vacant_clean,occupied,reserved,dirty,out_of_order'],
+            'housekeeping_status' => ['required', 'in:clean,dirty,inspected,out_of_order'],
+            'current_rate' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $roomType = HotelRoomType::query()->findOrFail((int) $data['room_type_id']);
+
+        HotelRoom::query()->updateOrCreate(
+            ['room_number' => $data['room_number']],
+            [
+                'room_type_id' => $data['room_type_id'],
+                'floor' => $data['floor'] ?? null,
+                'status' => $data['status'],
+                'housekeeping_status' => $data['housekeeping_status'],
+                'current_rate' => $data['current_rate'] ?: $roomType->base_rate,
+                'notes' => $data['notes'] ?? null,
+                'is_active' => true,
+            ]
+        );
+
+        return back()->with('status', 'Room setup saved.');
     }
 }

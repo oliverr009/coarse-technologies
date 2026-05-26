@@ -61,6 +61,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/actions/hotel/check-in', [ActionController::class, 'hotelCheckIn'])->name('actions.hotel.check-in');
     Route::post('/actions/hotel/check-out', [ActionController::class, 'hotelCheckout'])->name('actions.hotel.check-out');
     Route::post('/actions/hotel/room-status', [ActionController::class, 'hotelRoomStatus'])->name('actions.hotel.room-status');
+    Route::post('/actions/hotel/room-type', [ActionController::class, 'hotelRoomType'])->name('actions.hotel.room-type');
+    Route::post('/actions/hotel/room', [ActionController::class, 'hotelRoom'])->name('actions.hotel.room');
     Route::post('/actions/printers', [ActionController::class, 'printers'])->name('actions.printers');
     Route::post('/actions/settings', [ActionController::class, 'settings'])->name('actions.settings');
 });
