@@ -14,6 +14,7 @@
 .pms-list{display:flex;flex-direction:column;gap:10px}.pms-list-item{border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.025);padding:12px}.pms-list-item strong{display:block;font-size:13px;color:var(--text)}.pms-list-item span{display:block;margin-top:4px;font-size:11px;color:var(--text3);line-height:1.45}
 .pms-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.pms-inline{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:10px}.pms-table{overflow:hidden;border:1px solid var(--border);border-radius:16px}.pms-table table{width:100%;border-collapse:collapse}.pms-table th,.pms-table td{padding:11px 12px;border-bottom:1px solid var(--border);font-size:12px;text-align:left;vertical-align:top}.pms-table th{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);background:rgba(255,255,255,.02)}.pms-table tr:last-child td{border-bottom:none}
 .pms-note{padding:12px;border-radius:14px;background:rgba(40,188,238,.08);border:1px solid rgba(40,188,238,.16);font-size:12px;color:var(--text2);line-height:1.55}
+.pms-drop{display:block}.pms-drop>summary{list-style:none;cursor:pointer}.pms-drop>summary::-webkit-details-marker{display:none}.pms-summary{transition:background .16s ease}.pms-summary:hover{background:rgba(255,255,255,.025)}.pms-toggle{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:12px;background:rgba(40,188,238,.12);border:1px solid rgba(40,188,238,.22);color:var(--blue);font-size:12px;font-weight:800}.pms-toggle i{font-size:16px}.pms-drop[open] .pms-toggle i{transform:rotate(180deg)}.room-manage{margin-top:12px}.room-manage>summary{list-style:none;cursor:pointer}.room-manage>summary::-webkit-details-marker{display:none}.room-manage-btn{width:100%;height:38px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.035);color:var(--text2);display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;font-weight:800}.room-manage[open] .room-manage-btn i{transform:rotate(180deg)}
 @media(max-width:1480px){.pms-hero{grid-template-columns:repeat(3,1fr)}.pms-room-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:1180px){.pms-grid{grid-template-columns:1fr}.pms-form-grid,.pms-mini-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:760px){.pms-hero,.pms-form-grid,.pms-mini-grid,.pms-room-grid,.pms-inline{grid-template-columns:1fr}}
 </style>
 
@@ -41,30 +42,32 @@
     <div class="pms-grid">
         <div class="pms-stack">
             <div class="pms-card">
-                <div class="pms-head">
-                    <div><div class="pms-title">Reservation & Booking Engine</div><div class="pms-sub">Create walk-in and advance hotel reservations with deposits, room type, room assignment, and rate plan.</div></div>
-                    <span class="pms-badge rb-rsv">Front Desk</span>
-                </div>
-                <div class="pms-pad">
-                    <form method="post" action="{{ route('actions.hotel.reservation') }}" class="pms-form">
-                        @csrf
-                        <div class="pms-form-grid">
-                            <div><div class="lbl">Guest Name</div><input class="inp" name="guest_name" required></div>
-                            <div><div class="lbl">Phone</div><input class="inp" name="guest_phone"></div>
-                            <div><div class="lbl">Email</div><input class="inp" type="email" name="guest_email"></div>
-                            <div><div class="lbl">Room Type</div><select class="inp" name="room_type_id"><option value="">Select type</option>@foreach($roomTypes as $type)<option value="{{ $type->id }}">{{ $type->name }} · KES {{ number_format((float) $type->base_rate, 0) }}</option>@endforeach</select></div>
-                            <div><div class="lbl">Assign Room</div><select class="inp" name="hotel_room_id"><option value="">Assign later</option>@foreach($cleanRooms as $room)<option value="{{ $room->id }}">{{ $room->room_number }} · {{ $room->roomType->name ?? 'Room' }}</option>@endforeach</select></div>
-                            <div><div class="lbl">Guests</div><input class="inp" type="number" min="1" max="20" name="guests" value="1" required></div>
-                            <div><div class="lbl">Check-in</div><input class="inp" type="date" name="check_in_date" value="{{ now()->toDateString() }}" required></div>
-                            <div><div class="lbl">Check-out</div><input class="inp" type="date" name="check_out_date" value="{{ now()->addDay()->toDateString() }}" required></div>
-                            <div><div class="lbl">Rate Plan</div><input class="inp" name="rate_plan" value="rack"></div>
-                            <div><div class="lbl">Nightly Rate</div><input class="inp" type="number" step="0.01" min="0" name="nightly_rate" required></div>
-                            <div><div class="lbl">Deposit</div><input class="inp" type="number" step="0.01" min="0" name="deposit_amount" value="0"></div>
-                            <div class="pms-full"><div class="lbl">Notes</div><input class="inp" name="notes" placeholder="Arrival time, preference, source, special requests"></div>
-                        </div>
-                        <button class="btn btn-primary">Confirm Reservation</button>
-                    </form>
-                </div>
+                <details class="pms-drop">
+                    <summary class="pms-head pms-summary">
+                        <div><div class="pms-title">Reservation & Booking Engine</div><div class="pms-sub">Create advance reservations only when the front desk needs the form.</div></div>
+                        <span class="pms-toggle"><i class="ti ti-chevron-down" aria-hidden="true"></i> Book Reservation</span>
+                    </summary>
+                    <div class="pms-pad">
+                        <form method="post" action="{{ route('actions.hotel.reservation') }}" class="pms-form">
+                            @csrf
+                            <div class="pms-form-grid">
+                                <div><div class="lbl">Guest Name</div><input class="inp" name="guest_name" required></div>
+                                <div><div class="lbl">Phone</div><input class="inp" name="guest_phone"></div>
+                                <div><div class="lbl">Email</div><input class="inp" type="email" name="guest_email"></div>
+                                <div><div class="lbl">Room Type</div><select class="inp" name="room_type_id"><option value="">Select type</option>@foreach($roomTypes as $type)<option value="{{ $type->id }}">{{ $type->name }} · KES {{ number_format((float) $type->base_rate, 0) }}</option>@endforeach</select></div>
+                                <div><div class="lbl">Assign Room</div><select class="inp" name="hotel_room_id"><option value="">Assign later</option>@foreach($cleanRooms as $room)<option value="{{ $room->id }}">{{ $room->room_number }} · {{ $room->roomType->name ?? 'Room' }}</option>@endforeach</select></div>
+                                <div><div class="lbl">Guests</div><input class="inp" type="number" min="1" max="20" name="guests" value="1" required></div>
+                                <div><div class="lbl">Check-in</div><input class="inp" type="date" name="check_in_date" value="{{ now()->toDateString() }}" required></div>
+                                <div><div class="lbl">Check-out</div><input class="inp" type="date" name="check_out_date" value="{{ now()->addDay()->toDateString() }}" required></div>
+                                <div><div class="lbl">Rate Plan</div><input class="inp" name="rate_plan" value="rack"></div>
+                                <div><div class="lbl">Nightly Rate</div><input class="inp" type="number" step="0.01" min="0" name="nightly_rate" required></div>
+                                <div><div class="lbl">Deposit</div><input class="inp" type="number" step="0.01" min="0" name="deposit_amount" value="0"></div>
+                                <div class="pms-full"><div class="lbl">Notes</div><input class="inp" name="notes" placeholder="Arrival time, preference, source, special requests"></div>
+                            </div>
+                            <button class="btn btn-primary">Confirm Reservation</button>
+                        </form>
+                    </div>
+                </details>
             </div>
 
             <div class="pms-card">
@@ -116,18 +119,21 @@
                                     <div class="room-line"><span>Rate</span><strong>KES {{ number_format((float) ($room->current_rate ?? $room->roomType->base_rate ?? 0), 0) }}</strong></div>
                                     <div class="room-line"><span>Balance</span><strong>KES {{ number_format((float) ($room->active_folio_balance ?? 0), 0) }}</strong></div>
                                 </div>
-                                <form method="post" action="{{ route('actions.hotel.room-status') }}" class="pms-form" style="margin-top:12px">
-                                    @csrf
-                                    <input type="hidden" name="hotel_room_id" value="{{ $room->id }}">
-                                    <select class="inp" name="status">
-                                        @foreach(['vacant_clean','occupied','reserved','dirty','out_of_order'] as $status)<option value="{{ $status }}" @selected($room->status === $status)>{{ str_replace('_', ' ', $status) }}</option>@endforeach
-                                    </select>
-                                    <select class="inp" name="housekeeping_status">
-                                        @foreach(['clean','dirty','inspected','out_of_order'] as $status)<option value="{{ $status }}" @selected($room->housekeeping_status === $status)>{{ str_replace('_', ' ', $status) }}</option>@endforeach
-                                    </select>
-                                    <input class="inp" name="notes" value="{{ $room->notes }}" placeholder="Room note">
-                                    <button class="btn">Update Room</button>
-                                </form>
+                                <details class="room-manage">
+                                    <summary class="room-manage-btn"><i class="ti ti-chevron-down" aria-hidden="true"></i> Manage Room</summary>
+                                    <form method="post" action="{{ route('actions.hotel.room-status') }}" class="pms-form" style="margin-top:12px">
+                                        @csrf
+                                        <input type="hidden" name="hotel_room_id" value="{{ $room->id }}">
+                                        <select class="inp" name="status">
+                                            @foreach(['vacant_clean','occupied','reserved','dirty','out_of_order'] as $status)<option value="{{ $status }}" @selected($room->status === $status)>{{ str_replace('_', ' ', $status) }}</option>@endforeach
+                                        </select>
+                                        <select class="inp" name="housekeeping_status">
+                                            @foreach(['clean','dirty','inspected','out_of_order'] as $status)<option value="{{ $status }}" @selected($room->housekeeping_status === $status)>{{ str_replace('_', ' ', $status) }}</option>@endforeach
+                                        </select>
+                                        <input class="inp" name="notes" value="{{ $room->notes }}" placeholder="Room note">
+                                        <button class="btn">Update Room</button>
+                                    </form>
+                                </details>
                             </div>
                         @endforeach
                     </div>
@@ -163,21 +169,26 @@
             </div>
 
             <div class="pms-card">
-                <div class="pms-head"><div><div class="pms-title">Walk-in Check-in</div><div class="pms-sub">Open a stay immediately without first creating a reservation.</div></div></div>
-                <div class="pms-pad">
-                    <form method="post" action="{{ route('actions.hotel.check-in') }}" class="pms-form">
-                        @csrf
-                        <div class="pms-mini-grid">
-                            <div><div class="lbl">Guest Name</div><input class="inp" name="guest_name" required></div>
-                            <div><div class="lbl">Phone</div><input class="inp" name="guest_phone"></div>
-                            <div><div class="lbl">Room</div><select class="inp" name="hotel_room_id" required><option value="">Select clean room</option>@foreach($cleanRooms as $room)<option value="{{ $room->id }}">{{ $room->room_number }} · {{ $room->roomType->name ?? 'Room' }}</option>@endforeach</select></div>
-                            <div><div class="lbl">Checkout Date</div><input class="inp" type="date" name="check_out_date" value="{{ now()->addDay()->toDateString() }}" required></div>
-                            <div><div class="lbl">Room Rate</div><input class="inp" type="number" step="0.01" min="0" name="room_rate"></div>
-                            <div><div class="lbl">Payment / Deposit</div><input class="inp" type="number" step="0.01" min="0" name="deposit_amount" value="0"></div>
-                        </div>
-                        <button class="btn btn-primary">Check In Walk-in</button>
-                    </form>
-                </div>
+                <details class="pms-drop">
+                    <summary class="pms-head pms-summary">
+                        <div><div class="pms-title">Walk-in Check-in</div><div class="pms-sub">Keep the walk-in form tucked away until a guest is at the desk.</div></div>
+                        <span class="pms-toggle"><i class="ti ti-chevron-down" aria-hidden="true"></i> Walk-in</span>
+                    </summary>
+                    <div class="pms-pad">
+                        <form method="post" action="{{ route('actions.hotel.check-in') }}" class="pms-form">
+                            @csrf
+                            <div class="pms-mini-grid">
+                                <div><div class="lbl">Guest Name</div><input class="inp" name="guest_name" required></div>
+                                <div><div class="lbl">Phone</div><input class="inp" name="guest_phone"></div>
+                                <div><div class="lbl">Room</div><select class="inp" name="hotel_room_id" required><option value="">Select clean room</option>@foreach($cleanRooms as $room)<option value="{{ $room->id }}">{{ $room->room_number }} · {{ $room->roomType->name ?? 'Room' }}</option>@endforeach</select></div>
+                                <div><div class="lbl">Checkout Date</div><input class="inp" type="date" name="check_out_date" value="{{ now()->addDay()->toDateString() }}" required></div>
+                                <div><div class="lbl">Room Rate</div><input class="inp" type="number" step="0.01" min="0" name="room_rate"></div>
+                                <div><div class="lbl">Payment / Deposit</div><input class="inp" type="number" step="0.01" min="0" name="deposit_amount" value="0"></div>
+                            </div>
+                            <button class="btn btn-primary">Check In Walk-in</button>
+                        </form>
+                    </div>
+                </details>
             </div>
 
             <div class="pms-card">
